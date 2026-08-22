@@ -80,6 +80,7 @@ describe('Control Room server', () => {
     expect(html).toContain('Live control');
     expect(html).toContain('slotIndex: targetIndex');
     expect(html).toContain("replacing ? 'Replace' : 'Attach'");
+    expect(html).toContain("s.detail === 'session attached' ? 'attached'");
   });
 
   it('forwards a targeted replacement attachment to the daemon', async () => {

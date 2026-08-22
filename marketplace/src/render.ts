@@ -58,7 +58,11 @@ function renderAction(
     const lively = slot.state === 'thinking' || slot.state === 'running' || attention;
     const end = lively && !pulse ? colors[0] : colors[1];
     const title = slot.state === 'empty' ? `AG${action.index + 1}` : compact(slot.label, 12);
-    const footer = attention ? 'ATTENTION' : stateLabel(slot.state);
+    const footer = attention
+      ? 'ATTENTION'
+      : slot.detail === 'session attached'
+        ? 'ATTACHED'
+        : stateLabel(slot.state);
     return tile(colors[0], end, title, footer, action.index === status.selectedIndex, attention);
   }
 

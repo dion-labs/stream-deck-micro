@@ -28,6 +28,8 @@ export function renderSlotKey(
   ctx.textAlign = 'center';
   const caption = attentionState
     ? 'ATTENTION'
+    : snapshot.detail === 'session attached'
+      ? 'ATTACHED'
     : snapshot.state === 'empty'
       ? 'empty'
       : snapshot.state === 'thinking'

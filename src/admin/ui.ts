@@ -811,7 +811,7 @@ function mkSlotKey(s, i, onclick, attentionState) {
   var html = s.state === 'empty'
     ? '<span class="corner">' + (i+1) + '</span><span class="sub">empty</span>'
     : '<span class="corner">' + (i+1) + '</span>' + twoLines(s.label) +
-      '<span class="sub">' + (attentionState ? 'attention' : CAPTIONS[s.state]) + '</span>';
+      '<span class="sub">' + (attentionState ? 'attention' : s.detail === 'session attached' ? 'attached' : CAPTIONS[s.state]) + '</span>';
   var visualState = attentionState || s.state;
   var el = keyEl(html, 'st-' + visualState + pulse, onclick,
     s.state === 'empty' ? 'empty slot' : (s.label + ' — ' + s.state + (s.detail ? ' · ' + s.detail : '')));

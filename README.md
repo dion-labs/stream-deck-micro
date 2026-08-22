@@ -268,6 +268,8 @@ Its API rejects unexpected hosts and origins and requires a fresh process-local
 token embedded in the page. It is not designed for LAN or internet exposure.
 Layout changes save immediately to the active configuration and repaint both
 editions; Configure mode is restored whenever the page is opened or reloaded.
+An explicit session attachment briefly shows **ATTACHED** on that slot across
+the Control Room and both deck editions, even when the old and new task names match.
 
 The shared Codex endpoint is also bound to loopback only. The installer rejects
 non-local or authenticated URLs rather than exposing control of Codex sessions

@@ -27,6 +27,7 @@ interface Slot {
   updatedAt: number;
   unsubscribe: (() => void) | null;
   decayTimer: NodeJS.Timeout | null;
+  feedbackTimer: NodeJS.Timeout | null;
 }
 
 export interface SlotManagerOptions {
@@ -34,6 +35,8 @@ export interface SlotManagerOptions {
   defaultCwd: string;
   /** ms a done/error state stays lit before decaying to idle. */
   transientMs?: number;
+  /** ms an explicit attachment confirmation stays visible on every surface. */
+  attachmentFeedbackMs?: number;
 }
 
 /**
@@ -44,6 +47,7 @@ export class SlotManager {
   readonly slotCount: number;
   private readonly slots: Slot[] = [];
   private readonly transientMs: number;
+  private readonly attachmentFeedbackMs: number;
   private selectedIndex_ = 0;
   private readonly emitter = new EventEmitter();
 
@@ -53,6 +57,7 @@ export class SlotManager {
   ) {
     this.slotCount = opts.slotCount;
     this.transientMs = opts.transientMs ?? 2500;
+    this.attachmentFeedbackMs = opts.attachmentFeedbackMs ?? 4000;
     for (let i = 0; i < opts.slotCount; i++) {
       this.slots.push({
         index: i,
@@ -66,6 +71,7 @@ export class SlotManager {
         updatedAt: Date.now(),
         unsubscribe: null,
         decayTimer: null,
+        feedbackTimer: null,
       });
     }
   }
@@ -149,6 +155,24 @@ export class SlotManager {
     }
   }
 
+  /** Show an explicit, non-terminal acknowledgement after an admin attachment. */
+  confirmAttachment(slotIndex: number): void {
+    const slot = this.slots[slotIndex];
+    if (!slot?.session) return;
+    this.clearFeedback(slotIndex);
+    slot.detail = 'session attached';
+    slot.updatedAt = Date.now();
+    this.emitSlot(slotIndex);
+    slot.feedbackTimer = setTimeout(() => {
+      slot.feedbackTimer = null;
+      if (slot.detail !== 'session attached') return;
+      slot.detail = '';
+      slot.updatedAt = Date.now();
+      this.emitSlot(slotIndex);
+    }, this.attachmentFeedbackMs);
+    slot.feedbackTimer.unref?.();
+  }
+
   private bind(index: number, session: AgentSession, cwd?: string): void {
     const slot = this.slots[index];
     if (session.sessionId) {
@@ -185,6 +209,7 @@ export class SlotManager {
     slot.session?.dispose();
     slot.session = null;
     this.clearDecay(index);
+    this.clearFeedback(index);
   }
 
   /** Send a prompt to a slot; resolves when its turn completes. */
@@ -228,6 +253,10 @@ export class SlotManager {
     const slot = this.slots[index];
     const next = nextState(slot.state, event);
     this.clearDecay(index);
+    if (event.type !== 'meta') {
+      this.clearFeedback(index);
+      if (slot.detail === 'session attached') slot.detail = '';
+    }
     if (event.type === 'tool-started') {
       slot.detail = event.detail ?? event.tool;
     } else if (event.type === 'reasoning') {
@@ -259,6 +288,14 @@ export class SlotManager {
     if (slot.decayTimer) {
       clearTimeout(slot.decayTimer);
       slot.decayTimer = null;
+    }
+  }
+
+  private clearFeedback(index: number): void {
+    const slot = this.slots[index];
+    if (slot.feedbackTimer) {
+      clearTimeout(slot.feedbackTimer);
+      slot.feedbackTimer = null;
     }
   }
 

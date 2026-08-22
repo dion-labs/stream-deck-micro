@@ -48,6 +48,16 @@ describe('Marketplace key rendering', () => {
     expect(image).toContain('#F6F4FF');
   });
 
+  it('confirms a replacement even when the session label and state are unchanged', () => {
+    const attached = {
+      ...status,
+      slots: status.slots.map((slot, index) => index === 0
+        ? { ...slot, detail: 'session attached' }
+        : slot),
+    };
+    expect(renderKey(attached, 0, true)).toContain('ATTACHED');
+  });
+
   it('blacks out every action while simulated sleep is active', () => {
     const asleep = { ...status, deck: { ...status.deck, mode: 'asleep' as const } };
     expect(renderKey(asleep, 14, false)).not.toContain('DO IT');

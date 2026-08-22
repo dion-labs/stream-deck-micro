@@ -77,6 +77,7 @@ function manager(adapter: HarnessAdapter) {
     slotCount: 6,
     defaultCwd: '/tmp/proj',
     transientMs: 10,
+    attachmentFeedbackMs: 10,
   });
 }
 
@@ -186,6 +187,20 @@ describe('SlotManager', () => {
     await m.resumeSession(3, 'abc-123');
     expect(m.snapshot(3).state).toBe('idle');
     expect(m.snapshot(3).sessionId).toBe('abc-123');
+  });
+
+  it('emits a transient attachment confirmation without changing agent state', async () => {
+    const { adapter } = makeAdapter();
+    const m = manager(adapter);
+    await m.resumeSession(1, 'replacement');
+
+    m.confirmAttachment(1);
+
+    expect(m.snapshot(1).state).toBe('idle');
+    expect(m.snapshot(1).detail).toBe('session attached');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(m.snapshot(1).state).toBe('idle');
+    expect(m.snapshot(1).detail).toBe('');
   });
 
   it('rejects duplicate session ids before resuming a second copy', async () => {

@@ -324,6 +324,7 @@ export async function runDaemon(
     }
     if (manager.snapshot(index).state !== 'empty') manager.clear(index);
     const mode = await bindThreadRecord(appServer, manager, index, record);
+    manager.confirmAttachment(index);
     return { index, mode, name: record.name ?? null };
   }
 

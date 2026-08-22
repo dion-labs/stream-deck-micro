@@ -142,6 +142,12 @@ describe('renderer', () => {
     expect(buf.length).toBe(72 * 72 * 4);
   });
 
+  it('renders attachment confirmation differently from ordinary idle', () => {
+    const idle = slot(0, 'idle');
+    const attached = { ...idle, detail: 'session attached' };
+    expect(renderSlotKey(attached, true)).not.toEqual(renderSlotKey(idle, true));
+  });
+
   it('action key buffers are valid too', () => {
     expect(renderActionKey('NEW', [1, 2, 3], 'x').length).toBe(72 * 72 * 4);
   });
