@@ -1,0 +1,44 @@
+{
+  "harness": "codex-app-server",
+  "attachExternal": true,
+  "slots": {
+    "count": 6,
+    "cwd": "."
+  },
+  "admin": {
+    "enabled": true,
+    "port": 17531
+  },
+  "codex": {
+    "sandboxMode": "danger-full-access",
+    "approvalPolicy": "never"
+  },
+  "workflows": [
+    {
+      "id": "do-it",
+      "name": "DO IT",
+      "prompt": "lets do it"
+    },
+    {
+      "id": "review",
+      "name": "REVIEW",
+      "prompt": "Review the current diff and recent commits. Report issues by severity without modifying files."
+    },
+    {
+      "id": "debug",
+      "name": "DEBUG",
+      "prompt": "Find the root cause of the most recent failure. Explain it, then propose a minimal fix."
+    },
+    {
+      "id": "refactor",
+      "name": "REFACTOR",
+      "prompt": "Refactor the code touched most recently for clarity without changing behavior."
+    },
+    {
+      "id": "tests",
+      "name": "TESTS",
+      "prompt": "Run the test suite, fix any failing tests, and report what changed."
+    }
+  ],
+  "workflowsLibrary": []
+}

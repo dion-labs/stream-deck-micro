@@ -1,0 +1,65 @@
+{
+  "name": "stream-deck-micro",
+  "version": "0.1.0",
+  "description": "A local Codex command center for the Elgato Stream Deck MK.2",
+  "type": "module",
+  "license": "MIT",
+  "author": "Dion Labs",
+  "homepage": "https://deck.dionlabs.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dion-labs/stream-deck-micro.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dion-labs/stream-deck-micro/issues"
+  },
+  "keywords": [
+    "codex",
+    "stream-deck",
+    "agent",
+    "automation",
+    "developer-tools"
+  ],
+  "main": "./dist/main.js",
+  "types": "./dist/main.d.ts",
+  "bin": {
+    "stream-deck-micro": "./dist/cli/stream-deck-micro.js",
+    "sdm": "./dist/cli/sdm.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "SECURITY.md",
+    "config.example.json"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "start": "node dist/cli/stream-deck-micro.js start",
+    "dev": "tsx src/main.ts",
+    "sdm": "tsx src/cli/sdm.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run build && npm run test",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.7",
+    "@openai/codex-sdk": "^0.149.0",
+    "elgato-stream-deck": "^4.3.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.11"
+  }
+}

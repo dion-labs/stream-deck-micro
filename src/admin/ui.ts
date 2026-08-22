@@ -1,5 +1,5 @@
 /** Embedded admin panel — one self-contained page served by the daemon. */
-export const ADMIN_HTML = `<!doctype html>
+export const ADMIN_HTML: string = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -245,6 +245,7 @@ export const ADMIN_HTML = `<!doctype html>
 <script>
 'use strict';
 var $ = function(id) { return document.getElementById(id); };
+var apiToken = document.querySelector('meta[name="sdm-api-token"]').content;
 var editing = false;
 document.addEventListener('focusin', function(e) {
   editing = /INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
@@ -279,9 +280,9 @@ function toast(msg, err) {
 }
 function api(cmd, args, method) {
   var opts = args !== undefined
-    ? { method: method || 'POST', headers: {'content-type':'application/json'},
+    ? { method: method || 'POST', headers: {'content-type':'application/json', 'x-stream-deck-micro-token':apiToken},
         body: JSON.stringify(args) }
-    : undefined;
+    : { headers: {'x-stream-deck-micro-token':apiToken} };
   return fetch('/api/' + cmd, opts).then(function(res) {
     return res.json().catch(function() { return {}; }).then(function(data) {
       if (!res.ok) throw new Error(data.error || res.statusText);

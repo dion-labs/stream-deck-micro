@@ -1,0 +1,15 @@
+node_modules/
+dist/
+*.tgz
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Local machine configuration and development notes.
+config.json
+JOURNAL.md
+.zcode/
+
+# Runtime state.
+.stream-deck-micro/
