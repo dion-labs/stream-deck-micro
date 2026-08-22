@@ -10,7 +10,7 @@
     "test": "vitest run",
     "link": "streamdeck link ai.dionlabs.stream-deck-micro.sdPlugin",
     "validate": "npm run build && streamdeck validate ai.dionlabs.stream-deck-micro.sdPlugin",
-    "pack": "npm run validate && streamdeck pack ai.dionlabs.stream-deck-micro.sdPlugin"
+    "pack": "npm run validate && streamdeck pack --force ai.dionlabs.stream-deck-micro.sdPlugin"
   },
   "dependencies": {
     "@elgato/streamdeck": "^2.1.2",
