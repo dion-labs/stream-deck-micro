@@ -38,16 +38,6 @@ HID device exclusively, so two applications cannot drive the deck at once.
 
 ## Install
 
-### npm
-
-```bash
-npm install --global stream-deck-micro
-stream-deck-micro doctor
-stream-deck-micro start
-```
-
-### From source
-
 ```bash
 git clone https://github.com/dion-labs/stream-deck-micro.git
 cd stream-deck-micro
@@ -57,6 +47,9 @@ npm link
 stream-deck-micro doctor
 stream-deck-micro start
 ```
+
+The npm package is not published yet. Until it is, install from source as shown
+above so every command in this guide works as written.
 
 The daemon prints the local Control Room URL when it starts. By default it is
 `http://127.0.0.1:17531`.
