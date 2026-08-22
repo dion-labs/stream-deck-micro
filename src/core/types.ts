@@ -53,7 +53,7 @@ export type SessionEvent =
   | { type: 'turn-completed' }
   | { type: 'turn-failed'; error: string }
   /** Metadata changed (e.g. thread name); carries no state signal. */
-  | { type: 'meta' };
+  | { type: 'meta'; name?: string };
 
 /** A live conversation with one agent, bound to one slot. */
 export interface AgentSession {

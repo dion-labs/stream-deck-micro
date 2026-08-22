@@ -18,12 +18,12 @@ usage:
   sdm status                 show slots, states and workflows
   sdm send <text...>         send a prompt to the selected slot
   sdm new [cwd]              create a session in the first free slot
-  sdm select <1-6>           select a slot
+  sdm select <1-15>          select a slot
   sdm stop                   interrupt the selected slot
   sdm sleep                  put the physical deck to sleep
   sdm wake                   wake and repaint the physical deck
-  sdm clear [1-6]            clear a slot (default: selected)
-  sdm rename <1-6> <label|-> set or clear a custom slot label
+  sdm clear [1-15]           clear a slot (default: selected)
+  sdm rename <1-15> <label|-> set or clear a custom slot label
   sdm workflow <id>          run a workflow on the selected slot
   sdm sessions               list codex sessions (app-server harness)
   sdm attach [id]            attach newest (or given) session to a free slot
@@ -110,7 +110,7 @@ async function main(): Promise<void> {
         return;
       }
       case 'rename': {
-        if (rest.length < 2) throw new Error('usage: sdm rename <1-6> <label | ->');
+        if (rest.length < 2) throw new Error('usage: sdm rename <1-15> <label | ->');
         const label = rest.slice(1).join(' ') === '-' ? null : rest.slice(1).join(' ');
         await ipcCall(IPC_SOCKET, 'rename', { index: Number(rest[0]) - 1, label });
         console.log(label ? `renamed to "${label}".` : 'custom label cleared.');

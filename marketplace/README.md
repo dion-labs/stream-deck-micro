@@ -20,7 +20,8 @@ links do not reliably trigger bundled-profile installation, so import
 once. Marketplace installations use `AutoInstall` in the manifest.
 
 The action is position-aware on a 5×3 Stream Deck: its coordinates determine
-whether it represents a session, workflow, stop, attach, or sleep key. This
+whether it represents a session, workflow, stop, optional attach, or sleep key. Any
+position can host one of up to fifteen distinct session slots. This
 keeps the bundled profile editable without storing fifteen divergent action
 configurations.
 

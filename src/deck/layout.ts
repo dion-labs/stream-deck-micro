@@ -21,13 +21,12 @@ export interface DeckLayoutEntry {
 /**
  * 15-key (5×3) layout:
  *   row 0: slots 1–5
- *   row 1: slot 6, workflow #5, STOP, ATTACH, workflow #4
+ *   row 1: slot 6, workflow #5, STOP, slot 7, workflow #4
  *   row 2: workflows #1–3, SLEEP, DO IT
  */
-export const SLOT_KEYS = [0, 1, 2, 3, 4, 5];
+export const SLOT_KEYS = [0, 1, 2, 3, 4, 5, 8];
 export const KEY_WF_FIFTH = 6;
 export const KEY_STOP = 7;
-export const KEY_ATTACH = 8;
 export const KEY_WF_EXTRA = 9;
 export const KEY_SLEEP = 13;
 export const KEY_DO_IT = 14;
@@ -60,7 +59,7 @@ export function layoutActions(
         .filter(({ keyIndex, action }) =>
           keyIndex >= 0
           && keyIndex < 15
-          && (action.kind !== 'slot' || (action.index >= 0 && action.index < 6))
+          && (action.kind !== 'slot' || (action.index >= 0 && action.index < 15))
           && (action.kind !== 'workflow' || workflowIds.has(action.id)))
         .map(({ keyIndex, action }) => [keyIndex, action]),
     );
@@ -69,7 +68,6 @@ export function layoutActions(
   SLOT_KEYS.forEach((key, i) => map.set(key, { kind: 'slot', index: i }));
   map.set(KEY_STOP, { kind: 'stop' });
   map.set(KEY_SLEEP, { kind: 'sleep' });
-  map.set(KEY_ATTACH, { kind: 'attach' });
   for (const { key, workflow } of workflowKeyAssignments(workflows)) {
     map.set(key, { kind: 'workflow', id: workflow.id });
   }

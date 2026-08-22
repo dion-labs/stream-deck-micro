@@ -28,11 +28,10 @@ export class SurfaceKeyAction extends SingletonAction {
 
   constructor() {
     super();
-    const timer = setInterval(() => {
+    setInterval(() => {
       this.pulse = !this.pulse;
       void this.refresh();
     }, POLL_MS);
-    timer.unref?.();
   }
 
   override async onWillAppear(ev: WillAppearEvent): Promise<void> {

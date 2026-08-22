@@ -150,6 +150,13 @@ export async function runDaemon(
     ? new DeckController(virtualDeck, workflows, config.deck, config.layout)
     : DeckController.open(workflows, config.deck, config.layout);
 
+  const assignedSlotIndexes = (): number[] => [...new Set(
+    deck.status().layout
+      .filter((entry): entry is typeof entry & { action: { kind: 'slot'; index: number } } =>
+        entry.action.kind === 'slot')
+      .map((entry) => entry.action.index),
+  )].sort((a, b) => a - b);
+
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
 
@@ -215,13 +222,14 @@ export async function runDaemon(
   // to monitor-only bindings so they stay visible on the deck
   const persisted = loadState();
   if (persisted) {
+    const configuredSlots = new Set(assignedSlotIndexes());
     const currentRecords = appServer
       ? await appServer.listThreadRecords().catch(() => [] as MonitoredThread[])
       : [];
     const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
     const restoredSessionIds = new Set<string>();
     for (const slot of persisted.slots) {
-      if (slot.index >= config.slots.count) continue;
+      if (slot.index >= config.slots.count || !configuredSlots.has(slot.index)) continue;
       if (restoredSessionIds.has(slot.sessionId)) {
         log(`slot ${slot.index + 1}: skipped duplicate session ${slot.sessionId}`);
         continue;
@@ -247,7 +255,10 @@ export async function runDaemon(
       restoredSessionIds.add(slot.sessionId);
       if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
     }
-    manager.select(Math.min(persisted.selectedIndex, config.slots.count - 1));
+    const restoredSelection = configuredSlots.has(persisted.selectedIndex)
+      ? persisted.selectedIndex
+      : assignedSlotIndexes()[0];
+    if (restoredSelection !== undefined) manager.select(restoredSelection);
     saveState(manager, config.slots.cwd, deck);
   }
 
@@ -256,10 +267,11 @@ export async function runDaemon(
     try {
       const records = await appServer.listThreadRecords();
       const alreadyBound = new Set(manager.snapshots().map((s) => s.sessionId));
+      const visibleSlots = assignedSlotIndexes();
       for (const record of records) {
-        if (manager.snapshots().every((s) => s.state !== 'empty')) break;
+        if (visibleSlots.every((index) => manager.snapshot(index).state !== 'empty')) break;
         if (record.ephemeral || alreadyBound.has(record.id)) continue;
-        const index = manager.snapshots().find((s) => s.state === 'empty')?.index;
+        const index = visibleSlots.find((slotIndex) => manager.snapshot(slotIndex).state === 'empty');
         if (index === undefined) break;
         await bindThreadRecord(appServer, manager, index, record);
       }
@@ -319,8 +331,8 @@ export async function runDaemon(
     const index =
       slotIndex !== undefined
         ? slotIndex
-        : (manager.snapshots().find((s) => s.state === 'empty')?.index ?? -1);
-    if (index < 0 || index >= config.slots.count) throw new Error('no free slot');
+        : (assignedSlotIndexes().find((candidate) => manager.snapshot(candidate).state === 'empty') ?? -1);
+    if (index < 0 || index >= config.slots.count) throw new Error('no free session button');
     const existing = manager.snapshots().find((snapshot) => snapshot.sessionId === record.id);
     if (existing) {
       throw new Error(
@@ -354,8 +366,10 @@ export async function runDaemon(
         return { accepted: true };
       }
       case 'new': {
-        const index = await manager.createSession(args.cwd ? String(args.cwd) : undefined);
-        if (index < 0) throw new Error('no free slot');
+        const target = assignedSlotIndexes().find((index) => manager.snapshot(index).state === 'empty');
+        if (target === undefined) throw new Error('no free session button');
+        const index = await manager.createSession(args.cwd ? String(args.cwd) : undefined, target);
+        if (index < 0) throw new Error('no free session button');
         manager.select(index);
         return { index };
       }
@@ -432,15 +446,36 @@ export async function runDaemon(
       }
       case 'deck.layout.set': {
         const layout = DeckLayoutSchema.parse(args.layout);
+        const outOfRangeSlot = layout.find(({ action }) =>
+          action.kind === 'slot' && action.index >= config.slots.count);
+        if (outOfRangeSlot?.action.kind === 'slot') {
+          throw new Error(`session slot ${outOfRangeSlot.action.index + 1} exceeds configured capacity ${config.slots.count}`);
+        }
         const workflowIds = new Set(config.workflows.map((workflow) => workflow.id));
         const unknownWorkflow = layout.find(({ action }) =>
           action.kind === 'workflow' && !workflowIds.has(action.id));
         if (unknownWorkflow?.action.kind === 'workflow') {
           throw new Error(`unknown workflow: ${unknownWorkflow.action.id}`);
         }
+        const previousSlots = new Set(assignedSlotIndexes());
+        const nextSlots = new Set(layout
+          .filter((entry): entry is typeof entry & { action: { kind: 'slot'; index: number } } =>
+            entry.action.kind === 'slot')
+          .map((entry) => entry.action.index));
         const path = saveDeckLayout(sourcePath, layout);
         config.layout = layout;
         deck.setLayout(layout);
+        for (const index of previousSlots) {
+          if (!nextSlots.has(index) && manager.snapshot(index).state !== 'empty') {
+            deck.acknowledge(index, false);
+            manager.clear(index);
+          }
+        }
+        if (!nextSlots.has(manager.selectedIndex)) {
+          const nextSelection = [...nextSlots].find((index) => manager.snapshot(index).state !== 'empty')
+            ?? [...nextSlots][0];
+          if (nextSelection !== undefined) manager.select(nextSelection);
+        }
         log(`deck layout saved to ${path}`);
         return { ...deck.status(), path };
       }

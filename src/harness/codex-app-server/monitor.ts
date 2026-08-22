@@ -64,7 +64,12 @@ export class ExternalThreadMonitor {
   /** Seed/refresh the record for a watched thread (id, name, path from thread/list). */
   provideThread(thread: MonitoredThread): void {
     const entry = this.watched.get(thread.id);
-    if (entry) entry.thread = { ...entry.thread, ...thread };
+    if (!entry) return;
+    const previousName = entry.thread.name ?? null;
+    entry.thread = { ...entry.thread, ...thread };
+    if (thread.name && thread.name !== previousName) {
+      entry.emit({ type: 'meta', name: thread.name });
+    }
   }
 
   private ensureTimer(): void {
@@ -83,7 +88,11 @@ export class ExternalThreadMonitor {
       for (const entry of this.watched.values()) {
         const fresh = byId.get(entry.thread.id);
         if (!fresh) continue;
+        const previousName = entry.thread.name ?? null;
         entry.thread = { ...entry.thread, ...fresh };
+        if (fresh.name && fresh.name !== previousName) {
+          entry.emit({ type: 'meta', name: fresh.name });
+        }
         const bumped = entry.lastUpdatedAt !== null && fresh.updatedAt !== entry.lastUpdatedAt;
         if (entry.lastUpdatedAt === null && fresh.updatedAt != null) {
           // first sighting: only treat as active if it updated within the quiet window

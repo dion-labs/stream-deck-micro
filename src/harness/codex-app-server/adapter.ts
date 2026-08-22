@@ -129,8 +129,7 @@ class AppServerSession implements AgentSession {
   handleNotification(method: string, params: Record<string, unknown>): void {
     switch (method) {
       case 'thread/name/updated':
-        this.name_ = (params.name as string) ?? this.name_;
-        this.emit({ type: 'meta' });
+        this.updateName((params.name as string) ?? null);
         break;
       case 'turn/started':
         this.emit({ type: 'turn-started' });
@@ -163,6 +162,12 @@ class AppServerSession implements AgentSession {
         this.dispatchItem(params.item as { type?: string } & Record<string, unknown> | undefined);
         break;
     }
+  }
+
+  updateName(name: string | null): void {
+    if (!name || name === this.name_) return;
+    this.name_ = name;
+    this.emit({ type: 'meta', name });
   }
 
   private dispatchItem(item: { type?: string } & Record<string, unknown> | undefined): void {
@@ -213,14 +218,19 @@ class MonitorSession implements AgentSession {
   private owned: AgentSession | null = null;
   private acquiring: Promise<AgentSession> | null = null;
   private disposed = false;
+  private name_: string | null;
 
   constructor(
     private readonly monitor: ExternalThreadMonitor,
     readonly threadId: string,
-    private readonly initialName: string | null,
+    initialName: string | null,
     private readonly acquire: () => Promise<AgentSession>,
   ) {
-    this.monitorUnsubscribe = monitor.watch(threadId, (e) => this.emit(e));
+    this.name_ = initialName;
+    this.monitorUnsubscribe = monitor.watch(threadId, (event) => {
+      if (event.type === 'meta' && event.name) this.name_ = event.name;
+      this.emit(event);
+    });
   }
 
   get sessionId(): string | null {
@@ -228,7 +238,7 @@ class MonitorSession implements AgentSession {
   }
 
   get name(): string | null {
-    return this.owned?.name ?? this.initialName;
+    return this.owned?.name ?? this.name_;
   }
 
   async send(prompt: string, signal?: AbortSignal): Promise<void> {
@@ -315,7 +325,7 @@ export class AppServerAdapter implements HarnessAdapter {
         const resp = (await this.conn.request('thread/list', { limit: 50 })) as {
           data?: MonitoredThread[];
         };
-        return resp.data ?? [];
+        return (resp.data ?? []).map(normalizeThreadRecord);
       } catch {
         return [];
       }
@@ -356,10 +366,12 @@ export class AppServerAdapter implements HarnessAdapter {
     const resp = (await this.conn.request('thread/list', { limit: 50 })) as {
       data?: ThreadRecord[];
     };
-    return (resp.data ?? []).map((thread) => ({
-      ...thread,
-      name: thread.name ?? (thread.preview ? previewLabel(thread.preview) : null),
-    }));
+    const records = (resp.data ?? []).map(normalizeThreadRecord);
+    for (const record of records) {
+      this.sessions.get(record.id)?.updateName(record.name ?? null);
+      this.monitor.provideThread(record);
+    }
+    return records;
   }
 
   async createSession(opts: CreateSessionOptions): Promise<AgentSession> {
@@ -414,4 +426,11 @@ export class AppServerAdapter implements HarnessAdapter {
 function previewLabel(preview: string): string {
   const squeezed = preview.replace(/\s+/g, ' ').trim();
   return squeezed.length > 28 ? `${squeezed.slice(0, 28)}…` : squeezed;
+}
+
+function normalizeThreadRecord(thread: ThreadRecord): ThreadRecord {
+  return {
+    ...thread,
+    name: thread.name ?? (thread.preview ? previewLabel(thread.preview) : null),
+  };
 }

@@ -79,14 +79,14 @@ function slot(index: number, state: AgentSlotSnapshot['state']): AgentSlotSnapsh
 }
 
 describe('layout', () => {
-  it('maps 15 keys: slots, stop/attach/sleep, do-it pinned, workflows fill the rest', () => {
+  it('maps 15 keys: seven slots, stop/sleep, do-it pinned, workflows fill the rest', () => {
     const actions = layoutActions([{ id: 'do-it', name: 'DO IT' }, ...workflows]);
-    expect(actions.size).toBe(12); // 6 slots + stop/attach/sleep + do-it + 2 workflows
+    expect(actions.size).toBe(12); // 7 slots + stop/sleep + do-it + 2 workflows
     expect(actions.get(0)).toEqual({ kind: 'slot', index: 0 });
     expect(actions.get(5)).toEqual({ kind: 'slot', index: 5 });
+    expect(actions.get(8)).toEqual({ kind: 'slot', index: 6 });
     expect(actions.get(14)).toEqual({ kind: 'workflow', id: 'do-it' });
     expect(actions.get(7)).toEqual({ kind: 'stop' });
-    expect(actions.get(8)).toEqual({ kind: 'attach' });
     expect(actions.get(13)).toEqual({ kind: 'sleep' });
     expect(actions.get(10)).toEqual({ kind: 'workflow', id: 'review-pr' });
     expect(actions.get(11)).toEqual({ kind: 'workflow', id: 'debug' });
@@ -117,12 +117,14 @@ describe('layout', () => {
     const actions = layoutActions(workflows, [
       { keyIndex: 4, action: { kind: 'stop' } },
       { keyIndex: 14, action: { kind: 'slot', index: 0 } },
+      { keyIndex: 13, action: { kind: 'slot', index: 14 } },
       { keyIndex: 0, action: { kind: 'workflow', id: 'debug' } },
       { keyIndex: 1, action: { kind: 'workflow', id: 'removed' } },
     ]);
     expect([...actions]).toEqual([
       [4, { kind: 'stop' }],
       [14, { kind: 'slot', index: 0 }],
+      [13, { kind: 'slot', index: 14 }],
       [0, { kind: 'workflow', id: 'debug' }],
     ]);
   });
@@ -158,12 +160,12 @@ describe('DeckController', () => {
     const deck = new FakeDeck();
     const c = new DeckController(deck, workflows);
     c.render(
-      Array.from({ length: 6 }, (_, i) => slot(i, i === 0 ? 'running' : 'idle')),
+      Array.from({ length: 7 }, (_, i) => slot(i, i === 0 ? 'running' : 'idle')),
       0,
     );
     for (const key of SLOT_KEYS) expect(deck.fills.get(key)).toBeGreaterThan(0);
     expect(deck.fills.get(7)).toBeGreaterThan(0); // STOP
-    expect(deck.fills.get(8)).toBeGreaterThan(0); // ATTACH
+    expect(deck.fills.get(8)).toBeGreaterThan(0); // slot 7
     expect(deck.fills.get(13)).toBeGreaterThan(0); // SLEEP
     expect(deck.fills.get(10)).toBeGreaterThan(0); // workflow 1
   });
@@ -182,7 +184,7 @@ describe('DeckController', () => {
     expect(actions).toEqual([
       { kind: 'slot', index: 0 },
       { kind: 'stop' },
-      { kind: 'attach' },
+      { kind: 'slot', index: 6 },
       { kind: 'workflow', id: 'review-pr' },
       { kind: 'sleep' },
     ]);

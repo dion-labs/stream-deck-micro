@@ -23,10 +23,10 @@ The **Codex Micro** (kbd-1.0) is a limited-run macro keyboard co-developed by Op
 
 | Codex Micro feature | Stream Deck MK.2 equivalent | Status in v1 |
 |---|---|---|
-| Agent Keys (6) | 6 slot keys, each = one Codex session | ✅ v1 |
+| Agent Keys (6) | 7 session keys by default; any of the 15 positions can become a distinct session | ✅ expanded |
 | RGB state per key | Key background color + label: idle (grey), thinking (purple, pulsing), running (blue), done (green flash), error (red) | ✅ v1 |
 | Switch to chat | Slot key press selects the slot (active target for prompts/workflows) | ✅ v1 |
-| New chat key | Sessions are created elsewhere and pulled in with ATCH; `sdm new` remains available | Deliberately omitted from the deck |
+| New chat key | Sessions are created elsewhere and assigned from the Control Room; optional ATCH and `sdm new` remain available | Deliberately omitted from the default deck |
 | Interrupt | "STOP" key interrupts the selected slot's active turn | ✅ v1 |
 | Joystick workflows | Workflows page: one key per workflow (review PR, debug error, refactor, user-defined in config) → prompt sent to selected slot | ✅ v1 |
 | Free-text prompt | No keyboard on the deck → companion CLI `sdm send "..."` | ✅ v1 |

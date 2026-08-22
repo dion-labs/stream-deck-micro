@@ -27,6 +27,14 @@ describe('shared App Server setup', () => {
     ]).success).toBe(false);
   });
 
+  it('supports one distinct session slot per physical key', () => {
+    expect(ConfigSchema.parse({}).slots.count).toBe(15);
+    expect(ConfigSchema.safeParse({ slots: { count: 15 } }).success).toBe(true);
+    expect(DeckLayoutSchema.safeParse([
+      { keyIndex: 14, action: { kind: 'slot', index: 14 } },
+    ]).success).toBe(true);
+  });
+
   it('accepts only explicit loopback WebSocket endpoints', () => {
     expect(validateLoopbackEndpoint('ws://127.0.0.1:17532')).toBe('ws://127.0.0.1:17532');
     expect(

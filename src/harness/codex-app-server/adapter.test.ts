@@ -155,7 +155,7 @@ describe('AppServerAdapter', () => {
     const events = await eventsOf(session);
     conn.push('thread/name/updated', { threadId: 't-new', name: 'Fix the build' });
     expect(session.name).toBe('Fix the build');
-    expect(events).toContainEqual({ type: 'meta' });
+    expect(events).toContainEqual({ type: 'meta', name: 'Fix the build' });
   });
 
   it('externally-owned sessions preserve the writer-held error while still owned elsewhere', async () => {
@@ -168,6 +168,21 @@ describe('AppServerAdapter', () => {
     expect(session.sessionId).toBe('ext-1');
     expect(session.name).toBe('Rust Star');
     await expect(session.send('hi')).rejects.toThrow(WriterHeldError);
+  });
+
+  it('refreshes an externally-owned session name from the thread catalog', async () => {
+    const conn = new FakeConn();
+    conn.respond('thread/list', () => ({
+      data: [{ id: 'ext-1', name: 'Renamed in Codex', cwd: '/tmp/rust' }],
+    }));
+    const adapter = adapterWith(conn);
+    const session = adapter.monitorSession({ id: 'ext-1', name: 'Old name', cwd: '/tmp/rust' });
+    const events = await eventsOf(session);
+
+    await adapter.listSessions();
+
+    expect(session.name).toBe('Renamed in Codex');
+    expect(events).toContainEqual({ type: 'meta', name: 'Renamed in Codex' });
   });
 
   it('re-acquires an externally-owned session on send after its writer is released', async () => {
@@ -320,4 +335,23 @@ describe('ExternalThreadMonitor', () => {
     monitor.dispose();
     rmSync(dir, { recursive: true, force: true });
   }, 10000);
+
+  it('emits metadata when a watched thread is renamed', async () => {
+    let name = 'Before';
+    const { ExternalThreadMonitor } = await import('./monitor.js');
+    const monitor = new ExternalThreadMonitor(
+      async () => [{ id: 'ext-name', name, updatedAt: null, path: null }],
+      { pollMs: 20 },
+    );
+    const events: SessionEvent[] = [];
+    monitor.watch('ext-name', (event) => events.push(event));
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    events.length = 0;
+    name = 'After';
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    expect(events).toContainEqual({ type: 'meta', name: 'After' });
+    monitor.dispose();
+  });
 });

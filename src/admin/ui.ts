@@ -442,7 +442,10 @@ export const ADMIN_HTML: string = `<!doctype html>
     </div>
 
     <div class="tabpage" id="tab-sessions">
-      <input type="text" class="search" id="search" placeholder="search sessions by name or id…" style="margin-bottom:10px">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input type="text" class="search" id="search" placeholder="search sessions by name or id…" style="margin:0;flex:1">
+        <button class="btn" id="sessionRefresh">Refresh titles</button>
+      </div>
       <div class="hint" id="attachHint"></div>
       <div class="sessions" id="sessions"></div>
     </div>
@@ -875,11 +878,15 @@ $('deviceSleep').addEventListener('click', function() {
 /* ---------- slots tab ---------- */
 function renderInspector(status) {
   var i = status.selectedIndex;
+  if (controlMode === 'configure' && selectedKeyIndex !== null) {
+    var selectedEntry = layoutDraft.find(function(entry) { return entry.keyIndex === selectedKeyIndex; });
+    if (selectedEntry && selectedEntry.action.kind === 'slot') i = selectedEntry.action.index;
+  }
   var s = status.slots[i];
   var el = $('inspector');
   if (!s || s.state === 'empty') {
     el.innerHTML = '<div class="inspector"><div class="title"><h3>Slot ' + (i+1) + ' — empty</h3></div>' +
-      '<p class="detail">Nothing attached. Use <b>Sessions</b> to pull one in, or hit <b>ATCH</b> on the device.</p></div>';
+      '<p class="detail">Nothing attached. Open <b>Sessions</b> and attach the Codex session you want on this key.</p></div>';
     return;
   }
   el.innerHTML =
@@ -910,7 +917,8 @@ function renderInspector(status) {
 function renderSlotList(status) {
   var el = $('slotlist');
   el.innerHTML = '';
-  status.slots.forEach(function(s) {
+  var assigned = activeSlotIndexes(status);
+  status.slots.filter(function(s) { return assigned.indexOf(s.index) !== -1; }).forEach(function(s) {
     var row = document.createElement('div');
     row.className = 'row';
     var attached = s.state !== 'empty';
@@ -923,6 +931,14 @@ function renderSlotList(status) {
     }
     el.appendChild(row);
   });
+}
+
+function activeSlotIndexes(status) {
+  var indexes = [];
+  ((status.deck && status.deck.layout) || []).forEach(function(entry) {
+    if (entry.action.kind === 'slot' && indexes.indexOf(entry.action.index) === -1) indexes.push(entry.action.index);
+  });
+  return indexes;
 }
 
 function mkBtn(text, cls, onClick) {
@@ -1066,6 +1082,14 @@ $('wfSave').addEventListener('click', function() {
     .catch(function(e) { toast(e.message, true); });
 });
 $('search').addEventListener('input', renderSessions);
+$('sessionRefresh').addEventListener('click', function() {
+  api('sessions').then(function(sessions) {
+    allSessions = sessions;
+    renderSessions();
+    return refresh();
+  }).then(function() { toast('session titles refreshed'); })
+    .catch(function(e) { toast(e.message, true); });
+});
 
 function activateTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(function(btn) { btn.classList.toggle('on', btn.dataset.tab === tab); });
@@ -1095,9 +1119,11 @@ function refresh() {
   return api('status').then(function(status) {
     lastStatus = status;
     var active = status.slots.filter(function(s) { return s.state === 'thinking' || s.state === 'running'; }).length;
+    var assigned = activeSlotIndexes(status);
+    var attached = status.slots.filter(function(s) { return assigned.indexOf(s.index) !== -1 && s.state !== 'empty'; }).length;
     $('livedot').classList.toggle('on', true);
     $('meta').textContent = status.harness + ' · ' +
-      status.slots.filter(function(s) { return s.state !== 'empty'; }).length + '/6 sessions' +
+      attached + '/' + assigned.length + ' session keys' +
       (active ? ' · ' + active + ' active' : '');
     status.slots.forEach(function(s) {
       var prev = prevStates[s.index];
@@ -1134,10 +1160,9 @@ refresh().then(function() {
 });
 setInterval(function() {
   if (editing) return;
-  refresh().then(function() {
+  loadSessions().then(refresh).then(function() {
     if (lastStatus && draggingKeyIndex === null) renderDeck(lastStatus); // deck always repaints: pulse stays alive
   });
-  loadSessions();
 }, 1500);
 </script>
 </body>

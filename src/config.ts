@@ -55,7 +55,7 @@ export type DeckSettings = z.infer<typeof DeckSettingsSchema>;
 export const DEFAULT_DECK_SETTINGS: DeckSettings = DeckSettingsSchema.parse({});
 
 const KeyActionSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('slot'), index: z.number().int().min(0).max(5) }),
+  z.object({ kind: z.literal('slot'), index: z.number().int().min(0).max(14) }),
   z.object({ kind: z.literal('stop') }),
   z.object({ kind: z.literal('sleep') }),
   z.object({ kind: z.literal('attach') }),
@@ -104,7 +104,7 @@ export const ConfigSchema = z.object({
   harness: z.enum(['codex', 'codex-app-server']).default('codex'),
   slots: z
     .object({
-      count: z.number().int().min(1).max(6).default(6),
+      count: z.number().int().min(1).max(15).default(15),
       cwd: z.string().default(join(homedir(), 'dev')),
     })
     .default({}),

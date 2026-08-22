@@ -1,8 +1,8 @@
 # Stream Deck Micro
 
 Turn an Elgato Stream Deck MK.2 into a local command center for Codex sessions.
-Six live slot keys show what your agents are doing; the remaining keys sleep,
-interrupt, attach, and launch reusable workflows. Choose the official Elgato
+Seven live session keys ship by default, and any of the fifteen keys can become
+another session, system action, or reusable workflow. Choose the official Elgato
 Marketplace surface or the independent direct-HID surface; both use the same
 local bridge, Control Room, sessions, and behavior model.
 
@@ -17,7 +17,8 @@ local bridge, Control Room, sessions, and behavior model.
 
 ## What it does
 
-- Shares six recent Codex sessions with the desktop app while it remains open.
+- Shares up to fifteen Codex sessions with the desktop app while it remains open.
+- Detects Codex title changes automatically, with a manual refresh in the Control Room.
 - Shows idle, thinking, working, complete, and error states on physical RGB keys.
 - Sends one-tap workflows such as Review, Debug, Refactor, and Tests.
 - Interrupts the selected turn and attaches recent sessions without leaving the deck.
@@ -162,6 +163,11 @@ stream-deck-micro doctor ./my-deck.json
 stream-deck-micro start ./my-deck.json
 ```
 
+`slots.count` is the available session-slot capacity (`1`–`15`). Set it to
+`15` to let every physical position become a distinct session key. Only slots
+actually assigned in the Control Room are populated, so unused capacity does
+not attach hidden sessions.
+
 Shared mode adds this section:
 
 ```json
@@ -204,16 +210,17 @@ every prompt and use a narrower sandbox if this does not match your threat model
 ┌─────┬─────┬─────┬─────┬─────┐
 │ AG1 │ AG2 │ AG3 │ AG4 │ AG5 │
 ├─────┼─────┼─────┼─────┼─────┤
-│ AG6 │STATUS│STOP │ ATCH │TESTS│
+│ AG6 │STATUS│STOP │ AG7  │TESTS│
 ├─────┼─────┼─────┼─────┼─────┤
 │REVIEW│DEBUG│REFACTOR│SLEEP│DO IT│
 └─────┴─────┴─────┴─────┴─────┘
 ```
 
-- **AG1–AG6** select the target session. Empty slots are inert.
+- **AG1–AG7** select the target session. Empty slots are inert.
 - **DO IT** sends `lets do it` to the selected session.
 - **STOP** interrupts the selected turn.
-- **ATCH** attaches the newest unassigned Codex session.
+- Any key can become a distinct session button, up to all fifteen positions.
+- **ATCH** remains available as an optional action, but is not in the default layout.
 - **SLEEP** puts the surface to sleep immediately. It can instead toggle auto sleep.
 - **Workflow keys** send their configured prompts to the selected slot.
 
@@ -254,11 +261,13 @@ The Control Room is served only on `127.0.0.1`. It mirrors the physical 5×3
 deck and lets you:
 
 - start in safe **Configure** mode, where clicks only inspect keys and never run actions;
-- drag any key to swap positions and assign slot, system, or workflow functions directly;
+- drag any key to swap positions and assign session, system, or workflow functions directly;
+- turn any key into a distinct session button, with capacity for all fifteen positions;
 - opt into **Live control** when the browser deck should execute exactly like the hardware;
 - inspect and rename slots;
 - stop or remove a bound session;
 - search Codex sessions and attach one to the targeted slot, replacing its binding without deleting the underlying Codex task;
+- receive renamed Codex titles automatically or force a recovery sync with **Refresh titles**;
 - edit, explicitly run, park, and reactivate workflow prompts;
 - configure brightness, auto-sleep timing, and the sleep-key behavior;
 - sleep or wake the physical deck immediately;
@@ -285,7 +294,7 @@ sdm select 2
 sdm stop
 sdm sleep
 sdm wake
-sdm clear [1-6]
+sdm clear [1-15]
 sdm rename 2 "release prep"
 sdm workflow review
 sdm sessions
