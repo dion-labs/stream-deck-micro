@@ -575,27 +575,28 @@ function renderDeck(status) {
   deck.appendChild(k6.root);
 
   var doit = wfById['do-it'];
-  deck.appendChild(keyEl('<span class="t">DO IT</span><span class="sub">lets do it</span>',
-    'act doit', function() { return api('workflow', { id: 'do-it' }).then(function() { toast('“lets do it” sent'); }); },
-    doit ? doit.prompt : 'do-it workflow not configured').root);
+  var rest = wfActive.filter(function(w) { return w.id !== 'do-it'; });
+  function workflowCell(w) {
+    return w
+      ? keyEl('<span class="t">' + esc(w.name.slice(0,10)) + '</span>', 'wf',
+          function() { return api('workflow', { id: w.id }).then(function() { toast('workflow sent'); }); },
+          w.prompt).root
+      : keyEl('<span class="sub">—</span>', 'wf', null, 'free workflow key').root;
+  }
+
+  // Physical key 6: the fifth configurable workflow.
+  deck.appendChild(workflowCell(rest[4]));
   deck.appendChild(keyEl('<span class="t">STOP</span><span class="sub">interrupt</span>',
     'act stop', function() { return api('stop').then(function() { toast('interrupt sent'); }); },
     'interrupt the selected slot').root);
   deck.appendChild(keyEl('<span class="t">ATCH</span><span class="sub">pull in</span>',
     'act attach', function() { return api('attach', {}).then(function(r) { toast('attached “' + (r.name || '?') + '” → slot ' + (r.index+1) + ' (' + r.mode + ')'); }); },
     'attach the newest codex session to a free slot').root);
-
-  var rest = wfActive.filter(function(w) { return w.id !== 'do-it'; });
-  var restKeys = [10, 11, 12, 13, 9];
-  var cells = [];
-  for (var i = 0; i < 5; i++) {
-    var w = rest[i];
-    if (w) cells.push(keyEl('<span class="t">' + esc(w.name.slice(0,10)) + '</span>', 'wf',
-      (function(wid) { return function() { return api('workflow', { id: wid }).then(function() { toast('workflow sent'); }); }; })(w.id),
-      w.prompt).root);
-    else cells.push(keyEl('<span class="sub">—</span>', 'wf', null, 'free workflow key').root);
-  }
-  cells.forEach(function(c) { deck.appendChild(c); });
+  // Physical key 9 completes row two; keys 10–12 begin row three.
+  deck.appendChild(workflowCell(rest[3]));
+  deck.appendChild(workflowCell(rest[0]));
+  deck.appendChild(workflowCell(rest[1]));
+  deck.appendChild(workflowCell(rest[2]));
   var deckInfo = status.deck || { mode:'awake', settings:{ sleepKey:'sleep', autoSleep:{enabled:true} } };
   var toggleMode = deckInfo.settings.sleepKey === 'toggle-auto';
   var sleepTitle = toggleMode ? 'AUTO' : 'SLEEP';
@@ -608,6 +609,9 @@ function renderDeck(status) {
       next.autoSleep.enabled = !next.autoSleep.enabled;
       return api('deck/settings/set', next, 'PUT').then(function() { toast('auto sleep ' + (next.autoSleep.enabled ? 'enabled' : 'disabled')); });
     }, toggleMode ? 'toggle automatic sleep' : 'put the deck to sleep').root);
+  deck.appendChild(keyEl('<span class="t">DO IT</span><span class="sub">lets do it</span>',
+    'act doit', function() { return api('workflow', { id: 'do-it' }).then(function() { toast('“lets do it” sent'); }); },
+    doit ? doit.prompt : 'do-it workflow not configured').root);
 }
 
 function mkSlotKey(s, i, onclick, attentionState) {
@@ -776,7 +780,7 @@ function renderSessions() {
 /* ---------- workflows & library ---------- */
 function keyBadge(i) {
   if (i === 0 && wfActive[0] && wfActive[0].id === 'do-it') return '<span class="badge pin">DO IT key</span>';
-  var keys = ['K10','K11','K12','K13','K9'];
+  var keys = ['K10','K11','K12','K9','K6'];
   var off = (wfActive[0] && wfActive[0].id === 'do-it') ? i - 1 : i;
   return '<span class="badge key">' + (keys[off] || '—') + '</span>';
 }

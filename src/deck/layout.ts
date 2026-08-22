@@ -16,15 +16,16 @@ export interface WorkflowKey {
 /**
  * 15-key (5×3) layout:
  *   row 0: slots 1–5
- *   row 1: slot 6, DO IT (the 'do-it' workflow), STOP, ATTACH, workflow #5
- *   row 2: workflows #1–4, SLEEP in the bottom-right corner
+ *   row 1: slot 6, workflow #5, STOP, ATTACH, workflow #4
+ *   row 2: workflows #1–3, SLEEP, DO IT
  */
 export const SLOT_KEYS = [0, 1, 2, 3, 4, 5];
-export const KEY_DO_IT = 6;
+export const KEY_WF_FIFTH = 6;
 export const KEY_STOP = 7;
 export const KEY_ATTACH = 8;
 export const KEY_WF_EXTRA = 9;
-export const KEY_SLEEP = 14;
+export const KEY_SLEEP = 13;
+export const KEY_DO_IT = 14;
 
 /** Where each workflow lands: 'do-it' is pinned to its own action-style key. */
 export function workflowKeyAssignments(workflows: WorkflowKey[]): {
@@ -36,7 +37,7 @@ export function workflowKeyAssignments(workflows: WorkflowKey[]): {
   const rest = workflows.filter((w) => w.id !== 'do-it');
   const doIt = workflows.find((w) => w.id === 'do-it');
   if (doIt) assignments.push({ key: KEY_DO_IT, workflow: doIt, style: 'action' });
-  const restKeys = [10, 11, 12, 13, KEY_WF_EXTRA];
+  const restKeys = [10, 11, 12, KEY_WF_EXTRA, KEY_WF_FIFTH];
   rest.slice(0, restKeys.length).forEach((w, i) => {
     assignments.push({ key: restKeys[i], workflow: w, style: 'workflow' });
   });

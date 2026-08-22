@@ -151,9 +151,9 @@ every prompt and use a narrower sandbox if this does not match your threat model
 ┌─────┬─────┬─────┬─────┬─────┐
 │ AG1 │ AG2 │ AG3 │ AG4 │ AG5 │
 ├─────┼─────┼─────┼─────┼─────┤
-│ AG6 │DO IT│STOP │ ATCH │ WF  │
+│ AG6 │STATUS│STOP │ ATCH │TESTS│
 ├─────┼─────┼─────┼─────┼─────┤
-│REVIEW│DEBUG│REFACTOR│TESTS│SLEEP│
+│REVIEW│DEBUG│REFACTOR│SLEEP│DO IT│
 └─────┴─────┴─────┴─────┴─────┘
 ```
 

@@ -84,19 +84,33 @@ describe('layout', () => {
     expect(actions.size).toBe(12); // 6 slots + stop/attach/sleep + do-it + 2 workflows
     expect(actions.get(0)).toEqual({ kind: 'slot', index: 0 });
     expect(actions.get(5)).toEqual({ kind: 'slot', index: 5 });
-    expect(actions.get(6)).toEqual({ kind: 'workflow', id: 'do-it' });
+    expect(actions.get(14)).toEqual({ kind: 'workflow', id: 'do-it' });
     expect(actions.get(7)).toEqual({ kind: 'stop' });
     expect(actions.get(8)).toEqual({ kind: 'attach' });
-    expect(actions.get(14)).toEqual({ kind: 'sleep' });
+    expect(actions.get(13)).toEqual({ kind: 'sleep' });
     expect(actions.get(10)).toEqual({ kind: 'workflow', id: 'review-pr' });
     expect(actions.get(11)).toEqual({ kind: 'workflow', id: 'debug' });
   });
 
   it('without a do-it workflow its key stays unassigned', () => {
     const actions = layoutActions(workflows);
-    expect(actions.get(6)).toBeUndefined();
+    expect(actions.get(14)).toBeUndefined();
     expect(actions.get(10)).toEqual({ kind: 'workflow', id: 'review-pr' });
-    expect(actions.get(14)).toEqual({ kind: 'sleep' });
+    expect(actions.get(13)).toEqual({ kind: 'sleep' });
+  });
+
+  it('keeps five workflow keys when do-it and sleep occupy the bottom-right pair', () => {
+    const actions = layoutActions([
+      { id: 'do-it', name: 'DO IT' },
+      ...Array.from({ length: 5 }, (_, i) => ({ id: `wf-${i + 1}`, name: `WF ${i + 1}` })),
+    ]);
+    expect(actions.get(10)).toEqual({ kind: 'workflow', id: 'wf-1' });
+    expect(actions.get(11)).toEqual({ kind: 'workflow', id: 'wf-2' });
+    expect(actions.get(12)).toEqual({ kind: 'workflow', id: 'wf-3' });
+    expect(actions.get(9)).toEqual({ kind: 'workflow', id: 'wf-4' });
+    expect(actions.get(6)).toEqual({ kind: 'workflow', id: 'wf-5' });
+    expect(actions.get(13)).toEqual({ kind: 'sleep' });
+    expect(actions.get(14)).toEqual({ kind: 'workflow', id: 'do-it' });
   });
 
   it('state colors are distinct and pulse dims', () => {
@@ -130,7 +144,7 @@ describe('DeckController', () => {
     for (const key of SLOT_KEYS) expect(deck.fills.get(key)).toBeGreaterThan(0);
     expect(deck.fills.get(7)).toBeGreaterThan(0); // STOP
     expect(deck.fills.get(8)).toBeGreaterThan(0); // ATTACH
-    expect(deck.fills.get(14)).toBeGreaterThan(0); // SLEEP
+    expect(deck.fills.get(13)).toBeGreaterThan(0); // SLEEP
     expect(deck.fills.get(10)).toBeGreaterThan(0); // workflow 1
   });
 
@@ -143,8 +157,8 @@ describe('DeckController', () => {
     deck.press(7);
     deck.press(8);
     deck.press(10);
-    deck.press(14);
-    deck.press(13); // unmapped with only 2 workflows
+    deck.press(13);
+    deck.press(14); // unmapped without a do-it workflow
     expect(actions).toEqual([
       { kind: 'slot', index: 0 },
       { kind: 'stop' },
@@ -171,7 +185,7 @@ describe('DeckController', () => {
     const actions: unknown[] = [];
     c.on('action', (action) => actions.push(action));
 
-    deck.press(14);
+    deck.press(13);
     expect(actions).toEqual([{ kind: 'sleep' }]);
     c.sleep();
     expect(c.status().mode).toBe('asleep');
