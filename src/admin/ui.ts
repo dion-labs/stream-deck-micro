@@ -65,6 +65,9 @@ export const ADMIN_HTML: string = `<!doctype html>
   .key:hover .cap { filter: brightness(1.12); }
   .key:active { transform: translateY(1px) scale(.97); }
   .key.selected .cap { box-shadow: inset 0 0 0 2.5px #fff, 0 0 14px -2px rgba(255,255,255,.25); }
+  .key[draggable=true] { cursor: grab; }
+  .key.dragging { opacity: .38; transform: scale(.94); }
+  .key.drop-target { background: var(--accent); box-shadow: 0 0 0 2px rgba(200,255,99,.24), 0 0 24px rgba(200,255,99,.18); }
 
   .cap { position: absolute; inset: 4px; border-radius: 9px; overflow: hidden;
          display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -116,6 +119,20 @@ export const ADMIN_HTML: string = `<!doctype html>
 
   /* ---------- side panel ---------- */
   .tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+  .modebar { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; padding: 11px;
+             border: 1px solid var(--line); border-radius: 13px; background: #0b0d0a; }
+  .mode-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+                 border: 1px solid var(--line); border-radius: 11px; min-width: 220px; }
+  .mode-btn { border: 0; border-radius: 7px; padding: 7px 10px; color: var(--dim); background: transparent;
+              font: 600 11.5px/1.2 inherit; cursor: pointer; }
+  .mode-btn.on { color: #11140d; background: var(--accent); }
+  .mode-btn[data-mode=live].on { color: #fff; background: #a23737; }
+  .mode-help { color: var(--faint); font-size: 11.5px; line-height: 1.35; }
+  .key-inspector { margin-bottom: 15px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: #0d0f0c; }
+  .key-inspector .eyebrow { color: var(--accent); font: 9px/1.2 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .13em; }
+  .key-inspector .key-title { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; }
+  .key-inspector .key-title strong { font-size: 16px; }
+  .key-inspector select { width: 100%; }
   .tab-btn { flex: 1; padding: 8px 0; border-radius: 10px; border: 1px solid var(--line);
              background: transparent; color: var(--dim); font-size: 12.5px; font-weight: 600;
              cursor: pointer; transition: all .15s ease; }
@@ -353,6 +370,8 @@ export const ADMIN_HTML: string = `<!doctype html>
     .legend { gap: 9px; }
     .deck-note { display: none; }
     .tabs { overflow-x: auto; }
+    .modebar { align-items: stretch; flex-direction: column; }
+    .mode-switch { width: 100%; }
     .tab-btn { min-width: 80px; }
     .inspector .title h3 { font-size: 16px; }
     .sessions { max-height: 340px; }
@@ -378,7 +397,7 @@ export const ADMIN_HTML: string = `<!doctype html>
 <main>
   <div class="card deck-card">
     <div class="panel-head">
-      <div><p class="panel-kicker">Physical surface</p><h2>Your agents, at a glance.</h2><p>The virtual deck and the hardware share one command path. Click any key here to drive the same action.</p></div>
+      <div><p class="panel-kicker">Physical surface</p><h2>Your agents, at a glance.</h2><p>Configure safely, then switch to Live control when you want this preview to behave like the hardware.</p></div>
       <span class="panel-code">MK.2 / 15 KEY</span>
     </div>
     <div class="device-viewport">
@@ -392,7 +411,7 @@ export const ADMIN_HTML: string = `<!doctype html>
       <span><span class="sw" style="background:var(--blue)"></span>working</span>
       <span><span class="sw" style="background:var(--green)"></span>done</span>
       <span><span class="sw" style="background:var(--red)"></span>error</span>
-      <span class="deck-note"><b>Interactive</b> — clicks drive the real deck</span>
+      <span class="deck-note" id="deckNote"><b>Configure</b> — click to inspect · drag to reorder</span>
     </div>
     <div class="activity"><div class="activity-head"><span>Live activity</span><span>Newest first</span></div><div class="feed" id="feed"></div></div>
   </div>
@@ -401,6 +420,14 @@ export const ADMIN_HTML: string = `<!doctype html>
     <div class="panel-head">
       <div><p class="panel-kicker">Control Room</p><h2>Shape the surface.</h2><p>Inspect sessions, assign slots, and tune the prompts behind every workflow key.</p></div>
     </div>
+    <div class="modebar">
+      <div class="mode-switch" role="group" aria-label="Control Room interaction mode">
+        <button class="mode-btn on" data-mode="configure">Configure</button>
+        <button class="mode-btn" data-mode="live">Live control</button>
+      </div>
+      <div class="mode-help" id="modeHelp">Safe editing: keys inspect and drag. Nothing executes.</div>
+    </div>
+    <div id="keyInspector"></div>
     <div class="tabs">
       <button class="tab-btn on" data-tab="slots">Slots</button>
       <button class="tab-btn" data-tab="sessions">Sessions</button>
@@ -421,7 +448,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     </div>
 
     <div class="tabpage" id="tab-workflows">
-      <div class="hint">do-it is pinned to its own key; the rest fill the workflow row in order (max 5 more). Saving rewrites config.json and repaints the physical deck instantly.</div>
+      <div class="hint">Edit the names and prompts behind workflow actions. Key positions are arranged directly on the deck above.</div>
       <div id="workflows"></div>
       <div class="actions" style="margin-top:10px">
         <button class="btn" id="wfAdd">＋ new</button>
@@ -492,6 +519,11 @@ var wfActive = [];
 var wfLibrary = [];
 var prevStates = {};
 var feedLines = [];
+var controlMode = 'configure';
+var selectedKeyIndex = 0;
+var layoutDraft = [];
+var layoutDirty = false;
+var draggingKeyIndex = null;
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, function(c) {
@@ -508,6 +540,7 @@ function toast(msg, err) {
   setTimeout(function() { t.remove(); }, 2600);
 }
 function api(cmd, args, method) {
+  if (method && args === undefined) args = {};
   var opts = args !== undefined
     ? { method: method || 'POST', headers: {'content-type':'application/json', 'x-stream-deck-micro-token':apiToken},
         body: JSON.stringify(args) }
@@ -557,61 +590,208 @@ function twoLines(label) {
 function renderDeck(status) {
   var deck = $('deck');
   deck.innerHTML = '';
-  deck.className = 'deck mode-' + ((status.deck && status.deck.mode) || 'awake');
+  var visualMode = controlMode === 'configure' ? 'awake' : ((status.deck && status.deck.mode) || 'awake');
+  deck.className = 'deck mode-' + visualMode + (controlMode === 'configure' ? ' configuring' : ' live-control');
   var slots = status.slots;
   var attention = {};
   if (status.deck) status.deck.attention.forEach(function(a) { attention[a.index] = a.state; });
   var wfById = {};
   wfActive.forEach(function(w) { wfById[w.id] = w; });
-
-  function slotClick(i) {
-    if (slots[i].state === 'empty') { toast('slot ' + (i+1) + ' is empty — attach a session from the Sessions tab'); return null; }
-    return api('select', { index: i });
+  if (!layoutDirty && !draggingKeyIndex) {
+    layoutDraft = ((status.deck && status.deck.layout) || []).map(function(entry) {
+      return { keyIndex: entry.keyIndex, action: JSON.parse(JSON.stringify(entry.action)) };
+    });
   }
-
-  slots.slice(0, 5).forEach(function(s, i) { deck.appendChild(mkSlotKey(s, i, function() { return slotClick(i); }, attention[i]).root); });
-  var s6 = slots[5];
-  var k6 = mkSlotKey(s6, 5, function() { return slotClick(5); }, attention[5]);
-  deck.appendChild(k6.root);
-
-  var doit = wfById['do-it'];
-  var rest = wfActive.filter(function(w) { return w.id !== 'do-it'; });
-  function workflowCell(w) {
-    return w
-      ? keyEl('<span class="t">' + esc(w.name.slice(0,10)) + '</span>', 'wf',
-          function() { return api('workflow', { id: w.id }).then(function() { toast('workflow sent'); }); },
-          w.prompt).root
-      : keyEl('<span class="sub">—</span>', 'wf', null, 'free workflow key').root;
+  var byKey = {};
+  layoutDraft.forEach(function(entry) { byKey[entry.keyIndex] = entry.action; });
+  for (var keyIndex = 0; keyIndex < 15; keyIndex++) {
+    var action = byKey[keyIndex];
+    var visual = renderActionVisual(action, slots, attention, wfById, status);
+    wireDeckKey(visual.root, keyIndex, action, status);
+    deck.appendChild(visual.root);
   }
+  renderKeyInspector();
+}
 
-  // Physical key 6: the fifth configurable workflow.
-  deck.appendChild(workflowCell(rest[4]));
-  deck.appendChild(keyEl('<span class="t">STOP</span><span class="sub">interrupt</span>',
-    'act stop', function() { return api('stop').then(function() { toast('interrupt sent'); }); },
-    'interrupt the selected slot').root);
-  deck.appendChild(keyEl('<span class="t">ATCH</span><span class="sub">pull in</span>',
-    'act attach', function() { return api('attach', {}).then(function(r) { toast('attached “' + (r.name || '?') + '” → slot ' + (r.index+1) + ' (' + r.mode + ')'); }); },
-    'attach the newest codex session to a free slot').root);
-  // Physical key 9 completes row two; keys 10–12 begin row three.
-  deck.appendChild(workflowCell(rest[3]));
-  deck.appendChild(workflowCell(rest[0]));
-  deck.appendChild(workflowCell(rest[1]));
-  deck.appendChild(workflowCell(rest[2]));
+function renderActionVisual(action, slots, attention, wfById, status) {
+  if (!action) return keyEl('<span class="sub">empty</span>', '', null, 'unassigned key');
+  if (action.kind === 'slot') {
+    var s = slots[action.index];
+    return mkSlotKey(s, action.index, null, attention[action.index]);
+  }
+  if (action.kind === 'workflow') {
+    var workflow = wfById[action.id];
+    if (!workflow) return keyEl('<span class="sub">missing</span>', 'wf', null, action.id);
+    var doIt = workflow.id === 'do-it';
+    return keyEl('<span class="t">' + esc((doIt ? 'DO IT' : workflow.name).slice(0,10)) + '</span>' +
+      (doIt ? '<span class="sub">lets do it</span>' : ''), doIt ? 'act doit' : 'wf', null, workflow.prompt);
+  }
+  if (action.kind === 'stop') return keyEl('<span class="t">STOP</span><span class="sub">interrupt</span>', 'act stop', null, 'interrupt the selected slot');
+  if (action.kind === 'attach') return keyEl('<span class="t">ATCH</span><span class="sub">pull in</span>', 'act attach', null, 'attach the newest Codex session');
   var deckInfo = status.deck || { mode:'awake', settings:{ sleepKey:'sleep', autoSleep:{enabled:true} } };
   var toggleMode = deckInfo.settings.sleepKey === 'toggle-auto';
-  var sleepTitle = toggleMode ? 'AUTO' : 'SLEEP';
-  var sleepSub = toggleMode ? (deckInfo.settings.autoSleep.enabled ? 'on' : 'off') : 'now';
-  deck.appendChild(keyEl('<span class="t">' + sleepTitle + '</span><span class="sub">' + sleepSub + '</span>',
-    'act sleep', function() {
-      if (deckInfo.mode !== 'awake') return api('deck/wake', {});
-      if (!toggleMode) return api('deck/sleep', {});
-      var next = JSON.parse(JSON.stringify(deckInfo.settings));
-      next.autoSleep.enabled = !next.autoSleep.enabled;
-      return api('deck/settings/set', next, 'PUT').then(function() { toast('auto sleep ' + (next.autoSleep.enabled ? 'enabled' : 'disabled')); });
-    }, toggleMode ? 'toggle automatic sleep' : 'put the deck to sleep').root);
-  deck.appendChild(keyEl('<span class="t">DO IT</span><span class="sub">lets do it</span>',
-    'act doit', function() { return api('workflow', { id: 'do-it' }).then(function() { toast('“lets do it” sent'); }); },
-    doit ? doit.prompt : 'do-it workflow not configured').root);
+  return keyEl('<span class="t">' + (toggleMode ? 'AUTO' : 'SLEEP') + '</span><span class="sub">' +
+    (toggleMode ? (deckInfo.settings.autoSleep.enabled ? 'on' : 'off') : 'now') + '</span>', 'act sleep', null,
+    toggleMode ? 'toggle automatic sleep' : 'put the deck to sleep');
+}
+
+function wireDeckKey(root, keyIndex, action, status) {
+  root.dataset.keyIndex = keyIndex;
+  if (controlMode === 'configure') root.classList.toggle('selected', selectedKeyIndex === keyIndex);
+  root.draggable = controlMode === 'configure';
+  root.addEventListener('click', function() {
+    if (controlMode === 'configure') {
+      selectedKeyIndex = keyIndex;
+      renderDeck(status);
+      return;
+    }
+    Promise.resolve(executeAction(action, status)).then(refresh).catch(function(e) { toast(e.message, true); });
+  });
+  root.addEventListener('dragstart', function(ev) {
+    if (controlMode !== 'configure') { ev.preventDefault(); return; }
+    draggingKeyIndex = keyIndex;
+    root.classList.add('dragging');
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('text/plain', String(keyIndex));
+  });
+  root.addEventListener('dragover', function(ev) {
+    if (controlMode !== 'configure' || draggingKeyIndex === null) return;
+    ev.preventDefault();
+    ev.dataTransfer.dropEffect = 'move';
+    root.classList.add('drop-target');
+  });
+  root.addEventListener('dragleave', function() { root.classList.remove('drop-target'); });
+  root.addEventListener('drop', function(ev) {
+    ev.preventDefault();
+    root.classList.remove('drop-target');
+    var source = Number(ev.dataTransfer.getData('text/plain'));
+    draggingKeyIndex = null;
+    if (source !== keyIndex) swapLayoutKeys(source, keyIndex);
+  });
+  root.addEventListener('dragend', function() {
+    draggingKeyIndex = null;
+    root.classList.remove('dragging');
+  });
+}
+
+function executeAction(action, status) {
+  if (!action) { toast('this key is unassigned'); return null; }
+  var deckInfo = status.deck;
+  if (deckInfo && deckInfo.mode === 'asleep') return api('deck/wake', {});
+  if (deckInfo && deckInfo.mode === 'attention') {
+    var waiting = action.kind === 'slot' && deckInfo.attention.some(function(entry) { return entry.index === action.index; });
+    if (!waiting) return api('deck/wake', {});
+  }
+  if (action.kind === 'slot') {
+    var slot = status.slots[action.index];
+    if (!slot || slot.state === 'empty') { toast('slot ' + (action.index + 1) + ' is empty — attach a session first'); return null; }
+    return api('select', { index: action.index });
+  }
+  if (action.kind === 'stop') return api('stop', {}).then(function() { toast('interrupt sent'); });
+  if (action.kind === 'attach') return api('attach', {}).then(function(r) { toast('attached “' + (r.name || '?') + '” → slot ' + (r.index+1) + ' (' + r.mode + ')'); });
+  if (action.kind === 'workflow') return api('workflow', { id: action.id }).then(function() { toast('workflow sent'); });
+  if (deckInfo.mode !== 'awake') return api('deck/wake', {});
+  if (deckInfo.settings.sleepKey !== 'toggle-auto') return api('deck/sleep', {});
+  var next = JSON.parse(JSON.stringify(deckInfo.settings));
+  next.autoSleep.enabled = !next.autoSleep.enabled;
+  return api('deck/settings/set', next, 'PUT').then(function() { toast('auto sleep ' + (next.autoSleep.enabled ? 'enabled' : 'disabled')); });
+}
+
+function swapLayoutKeys(from, to) {
+  var fromEntry = layoutDraft.find(function(entry) { return entry.keyIndex === from; });
+  var toEntry = layoutDraft.find(function(entry) { return entry.keyIndex === to; });
+  if (fromEntry) fromEntry.keyIndex = to;
+  if (toEntry) toEntry.keyIndex = from;
+  selectedKeyIndex = to;
+  saveLayout('layout reordered');
+}
+
+function saveLayout(message) {
+  layoutDirty = true;
+  layoutDraft.sort(function(a, b) { return a.keyIndex - b.keyIndex; });
+  renderDeck(lastStatus);
+  return api('deck/layout/set', { layout: layoutDraft }, 'PUT').then(function(data) {
+    layoutDirty = false;
+    layoutDraft = data.layout || layoutDraft;
+    toast(message || 'layout saved');
+    return refresh();
+  }).catch(function(error) {
+    layoutDirty = false;
+    toast(error.message, true);
+    return refresh();
+  });
+}
+
+function actionValue(action) {
+  if (!action) return '';
+  if (action.kind === 'slot') return 'slot:' + action.index;
+  if (action.kind === 'workflow') return 'workflow:' + action.id;
+  return action.kind;
+}
+
+function actionFromValue(value) {
+  if (!value) return null;
+  var parts = value.split(':');
+  if (parts[0] === 'slot') return { kind:'slot', index:Number(parts[1]) };
+  if (parts[0] === 'workflow') return { kind:'workflow', id:parts.slice(1).join(':') };
+  return { kind:value };
+}
+
+function actionLabel(action) {
+  if (!action) return 'Empty key';
+  if (action.kind === 'slot') return 'Session slot ' + (action.index + 1);
+  if (action.kind === 'workflow') {
+    var workflow = wfActive.find(function(w) { return w.id === action.id; });
+    return workflow ? 'Workflow · ' + workflow.name : 'Missing workflow · ' + action.id;
+  }
+  return action.kind === 'stop' ? 'Stop current turn' : action.kind === 'attach' ? 'Attach newest session' : 'Sleep control';
+}
+
+function renderKeyInspector() {
+  var host = $('keyInspector');
+  if (controlMode !== 'configure') { host.innerHTML = ''; return; }
+  var entry = layoutDraft.find(function(candidate) { return candidate.keyIndex === selectedKeyIndex; });
+  var action = entry && entry.action;
+  var options = [{ value:'', label:'Empty key' }];
+  if (lastStatus) lastStatus.slots.forEach(function(slot) { options.push({ value:'slot:' + slot.index, label:'Session slot ' + (slot.index + 1) }); });
+  options.push({ value:'stop', label:'Stop current turn' }, { value:'attach', label:'Attach newest session' }, { value:'sleep', label:'Sleep control' });
+  wfActive.forEach(function(workflow) { options.push({ value:'workflow:' + workflow.id, label:'Workflow · ' + workflow.name }); });
+  host.innerHTML = '<div class="key-inspector"><div class="eyebrow">Selected key · K' + selectedKeyIndex + '</div>' +
+    '<div class="key-title"><strong>' + esc(actionLabel(action)) + '</strong><span class="badge">position ' + (selectedKeyIndex + 1) + '</span></div>' +
+    '<label class="hint" for="keyFunction">Function</label><select id="keyFunction">' + options.map(function(option) {
+      return '<option value="' + esc(option.value) + '"' + (option.value === actionValue(action) ? ' selected' : '') + '>' + esc(option.label) + '</option>';
+    }).join('') + '</select>' +
+    (action && action.kind === 'workflow' ? '<div class="actions"><button class="btn mini" id="editWorkflow">Edit prompt →</button></div>' : '') +
+    '<p class="hint" style="margin:9px 0 0">Choosing an action already on the deck swaps the two keys. Changes save immediately.</p></div>';
+  $('keyFunction').addEventListener('change', function() { assignKeyAction(selectedKeyIndex, actionFromValue(this.value)); });
+  var edit = $('editWorkflow');
+  if (edit) edit.addEventListener('click', function() { openWorkflowEditor(action.id); });
+}
+
+function assignKeyAction(keyIndex, nextAction) {
+  var current = layoutDraft.find(function(entry) { return entry.keyIndex === keyIndex; });
+  var nextValue = actionValue(nextAction);
+  var existing = layoutDraft.find(function(entry) { return actionValue(entry.action) === nextValue; });
+  if (!nextAction) {
+    layoutDraft = layoutDraft.filter(function(entry) { return entry.keyIndex !== keyIndex; });
+  } else if (existing && existing.keyIndex !== keyIndex) {
+    var oldKey = existing.keyIndex;
+    existing.keyIndex = keyIndex;
+    if (current) current.keyIndex = oldKey;
+  } else if (current) {
+    current.action = nextAction;
+  } else {
+    layoutDraft.push({ keyIndex:keyIndex, action:nextAction });
+  }
+  saveLayout('key function saved');
+}
+
+function openWorkflowEditor(id) {
+  var index = wfActive.findIndex(function(workflow) { return workflow.id === id; });
+  if (index < 0) return;
+  activateTab('workflows');
+  var card = Array.prototype.find.call(document.querySelectorAll('.wf'), function(candidate) { return candidate.dataset.workflowId === id; });
+  if (card) { card.scrollIntoView({ behavior:'smooth', block:'center' }); card.querySelector('textarea').focus(); }
 }
 
 function mkSlotKey(s, i, onclick, attentionState) {
@@ -709,7 +889,7 @@ function renderInspector(status) {
     if (label === null) return null;
     return api('rename', { index: s.index, label: label }).then(function() { toast(label ? 'renamed' : 'label reset'); });
   });
-  var stopBtn = mkBtn('Stop turn', 'btn', function() { return api('stop'); });
+  var stopBtn = mkBtn('Stop turn', 'btn', function() { return api('stop', {}); });
   var removeBtn = mkBtn('Remove', 'btn danger', function() {
     return api('clear', { index: s.index }).then(function() { toast('slot ' + (s.index+1) + ' cleared'); });
   });
@@ -791,6 +971,7 @@ function renderWorkflows() {
   wfActive.forEach(function(w, i) {
     var div = document.createElement('div');
     div.className = 'wf';
+    div.dataset.workflowId = w.id;
     div.innerHTML =
       '<div class="head">' + keyBadge(i) +
       '<input type="text" class="name-input" maxlength="10" value="' + esc(w.name) + '" data-i="' + i + '" data-f="name">' +
@@ -862,12 +1043,26 @@ $('wfSave').addEventListener('click', function() {
 });
 $('search').addEventListener('input', renderSessions);
 
+function activateTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach(function(btn) { btn.classList.toggle('on', btn.dataset.tab === tab); });
+  document.querySelectorAll('.tabpage').forEach(function(page) { page.classList.toggle('on', page.id === 'tab-' + tab); });
+}
+
 document.querySelectorAll('.tab-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() { activateTab(btn.dataset.tab); });
+});
+
+document.querySelectorAll('.mode-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
-    document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('on'); });
-    document.querySelectorAll('.tabpage').forEach(function(p) { p.classList.remove('on'); });
-    btn.classList.add('on');
-    $('tab-' + btn.dataset.tab).classList.add('on');
+    controlMode = btn.dataset.mode;
+    document.querySelectorAll('.mode-btn').forEach(function(candidate) { candidate.classList.toggle('on', candidate === btn); });
+    $('modeHelp').textContent = controlMode === 'configure'
+      ? 'Safe editing: keys inspect and drag. Nothing executes.'
+      : 'Armed: key clicks now run the same actions as the physical deck.';
+    $('deckNote').innerHTML = controlMode === 'configure'
+      ? '<b>Configure</b> — click to inspect · drag to reorder'
+      : '<b>Live control</b> — clicks execute immediately';
+    if (lastStatus) renderDeck(lastStatus);
   });
 });
 
@@ -887,7 +1082,7 @@ function refresh() {
       }
       prevStates[s.index] = s.state;
     });
-    renderDeck(status);
+    if (draggingKeyIndex === null) renderDeck(status);
     if (!editing) { renderInspector(status); renderSlotList(status); renderSessions(); renderDevice(status); }
   }).catch(function(e) {
     $('livedot').classList.remove('on');
@@ -916,7 +1111,7 @@ refresh().then(function() {
 setInterval(function() {
   if (editing) return;
   refresh().then(function() {
-    if (lastStatus) renderDeck(lastStatus); // deck always repaints: pulse stays alive
+    if (lastStatus && draggingKeyIndex === null) renderDeck(lastStatus); // deck always repaints: pulse stays alive
   });
   loadSessions();
 }, 1500);

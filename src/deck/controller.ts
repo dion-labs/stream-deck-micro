@@ -8,12 +8,8 @@ import type { AgentSlotSnapshot } from '../core/types.js';
 import {
   ACTION_KEYS_STYLE,
   DO_IT_STYLE,
-  KEY_ATTACH,
-  KEY_SLEEP,
-  KEY_STOP,
-  SLOT_KEYS,
   layoutActions,
-  workflowKeyAssignments,
+  type DeckLayoutEntry,
   type KeyAction,
   type WorkflowKey,
 } from './layout.js';
@@ -64,6 +60,7 @@ export class DeckController {
   private readonly device: DeckDriver;
   private readonly workflows: WorkflowKey[];
   private settings: DeckSettings;
+  private layout: DeckLayoutEntry[] | undefined;
   private snapshots: AgentSlotSnapshot[] = [];
   private readonly attention = new Map<number, AttentionState>();
   private selectedIndex = 0;
@@ -77,10 +74,12 @@ export class DeckController {
     device: DeckDriver,
     workflows: WorkflowKey[],
     settings: DeckSettings = DEFAULT_DECK_SETTINGS,
+    layout?: DeckLayoutEntry[],
   ) {
     this.device = device;
     this.workflows = workflows;
     this.settings = cloneSettings(settings);
+    this.layout = cloneLayout(layout);
     this.device.on('down', (keyIndex: number) => this.onDown(keyIndex));
     this.device.on('error', (e: unknown) => {
       throw e instanceof Error ? e : new Error(String(e));
@@ -88,7 +87,11 @@ export class DeckController {
   }
 
   /** Open the real device; throws with a helpful message if it's unavailable. */
-  static open(workflows: WorkflowKey[], settings: DeckSettings = DEFAULT_DECK_SETTINGS): DeckController {
+  static open(
+    workflows: WorkflowKey[],
+    settings: DeckSettings = DEFAULT_DECK_SETTINGS,
+    layout?: DeckLayoutEntry[],
+  ): DeckController {
     let device: StreamDeck;
     try {
       device = openStreamDeck();
@@ -99,7 +102,7 @@ export class DeckController {
           'The app holds the HID device exclusively.',
       );
     }
-    return new DeckController(device as unknown as DeckDriver, workflows, settings);
+    return new DeckController(device as unknown as DeckDriver, workflows, settings, layout);
   }
 
   on<K extends keyof DeckEvents>(event: K, listener: DeckEvents[K]): void {
@@ -110,7 +113,12 @@ export class DeckController {
   setWorkflows(workflows: WorkflowKey[]): void {
     this.workflows.length = 0;
     this.workflows.push(...workflows);
-    if (this.mode === 'awake') this.drawStaticKeys();
+    if (this.mode === 'awake') this.repaintAll();
+  }
+
+  setLayout(layout: DeckLayoutEntry[]): void {
+    this.layout = cloneLayout(layout);
+    if (this.mode === 'awake') this.repaintAll();
   }
 
   setSettings(settings: DeckSettings): void {
@@ -125,7 +133,7 @@ export class DeckController {
     return {
       mode: this.mode,
       settings: cloneSettings(this.settings),
-      layout: [...layoutActions(this.workflows)].map(([keyIndex, action]) => ({ keyIndex, action })),
+      layout: [...this.actions()].map(([keyIndex, action]) => ({ keyIndex, action })),
       attention: [...this.attention.entries()].map(([index, state]) => ({
         index,
         state,
@@ -236,7 +244,8 @@ export class DeckController {
   }
 
   private drawSlot(snapshot: AgentSlotSnapshot): void {
-    const key = SLOT_KEYS[snapshot.index];
+    const key = [...this.actions()].find(([, action]) =>
+      action.kind === 'slot' && action.index === snapshot.index)?.[0];
     if (key === undefined) return;
     const buffer = renderSlotKey(
       snapshot,
@@ -249,28 +258,30 @@ export class DeckController {
   }
 
   private drawStaticKeys(): void {
-    for (const [action, key] of [
-      ['stop', KEY_STOP],
-      ['sleep', KEY_SLEEP],
-      ['attach', KEY_ATTACH],
-    ] as const) {
-      const style = ACTION_KEYS_STYLE[action];
-      this.device.fillImage(key, renderActionKey(style.title, style.color), { format: 'rgba' });
-    }
-    if (this.settings.sleepKey === 'toggle-auto') {
-      this.device.fillImage(
-        KEY_SLEEP,
-        renderActionKey('AUTO', this.settings.autoSleep.enabled ? [48, 78, 66] : [55, 58, 66], this.settings.autoSleep.enabled ? 'ON' : 'OFF'),
-        { format: 'rgba' },
-      );
-    }
-    for (const { key, workflow, style } of workflowKeyAssignments(this.workflows)) {
-      const title = style === 'action' ? DO_IT_STYLE.title : workflow.name.slice(0, 10);
-      const color: [number, number, number] =
-        style === 'action' ? DO_IT_STYLE.color : [55, 65, 110];
+    for (const [key, action] of this.actions()) {
+      if (action.kind === 'slot') continue;
+      if (action.kind === 'workflow') {
+        const workflow = this.workflows.find((candidate) => candidate.id === action.id);
+        if (!workflow) continue;
+        const doIt = workflow.id === 'do-it';
+        this.device.fillImage(
+          key,
+          renderActionKey(
+            doIt ? DO_IT_STYLE.title : workflow.name.slice(0, 10),
+            doIt ? DO_IT_STYLE.color : [55, 65, 110],
+            doIt ? undefined : workflow.id,
+          ),
+          { format: 'rgba' },
+        );
+        continue;
+      }
+      const style = ACTION_KEYS_STYLE[action.kind];
+      const isAutoSleep = action.kind === 'sleep' && this.settings.sleepKey === 'toggle-auto';
       this.device.fillImage(
         key,
-        renderActionKey(title, color, style === 'workflow' ? workflow.id : undefined),
+        isAutoSleep
+          ? renderActionKey('AUTO', this.settings.autoSleep.enabled ? [48, 78, 66] : [55, 58, 66], this.settings.autoSleep.enabled ? 'ON' : 'OFF')
+          : renderActionKey(style.title, style.color),
         { format: 'rgba' },
       );
     }
@@ -304,7 +315,7 @@ export class DeckController {
   }
 
   private onDown(keyIndex: number): void {
-    const action = layoutActions(this.workflows).get(keyIndex);
+    const action = this.actions().get(keyIndex);
     if (this.mode === 'asleep') {
       this.wake();
       return;
@@ -323,8 +334,13 @@ export class DeckController {
   }
 
   private repaintAll(): void {
+    this.device.clearAllKeys();
     for (const snapshot of this.snapshots) this.drawSlot(snapshot);
     this.drawStaticKeys();
+  }
+
+  private actions(): Map<number, KeyAction> {
+    return layoutActions(this.workflows, this.layout);
   }
 
   private resetAutoSleepTimer(): void {
@@ -388,6 +404,10 @@ export class DeckController {
 
 function cloneSettings(settings: DeckSettings): DeckSettings {
   return { ...settings, autoSleep: { ...settings.autoSleep } };
+}
+
+function cloneLayout(layout?: DeckLayoutEntry[]): DeckLayoutEntry[] | undefined {
+  return layout?.map(({ keyIndex, action }) => ({ keyIndex, action: { ...action } }));
 }
 
 function slotChanged(previous: AgentSlotSnapshot, next: AgentSlotSnapshot): boolean {

@@ -113,6 +113,20 @@ describe('layout', () => {
     expect(actions.get(14)).toEqual({ kind: 'workflow', id: 'do-it' });
   });
 
+  it('uses a custom layout and ignores workflows that no longer exist', () => {
+    const actions = layoutActions(workflows, [
+      { keyIndex: 4, action: { kind: 'stop' } },
+      { keyIndex: 14, action: { kind: 'slot', index: 0 } },
+      { keyIndex: 0, action: { kind: 'workflow', id: 'debug' } },
+      { keyIndex: 1, action: { kind: 'workflow', id: 'removed' } },
+    ]);
+    expect([...actions]).toEqual([
+      [4, { kind: 'stop' }],
+      [14, { kind: 'slot', index: 0 }],
+      [0, { kind: 'workflow', id: 'debug' }],
+    ]);
+  });
+
   it('state colors are distinct and pulse dims', () => {
     const idle = stateColor('idle');
     const think = stateColor('thinking', 1);
@@ -166,6 +180,28 @@ describe('DeckController', () => {
       { kind: 'workflow', id: 'review-pr' },
       { kind: 'sleep' },
     ]);
+  });
+
+  it('renders and executes actions from a custom key map', () => {
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings, [
+      { keyIndex: 14, action: { kind: 'slot', index: 0 } },
+      { keyIndex: 0, action: { kind: 'stop' } },
+      { keyIndex: 4, action: { kind: 'workflow', id: 'debug' } },
+    ]);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, 'idle')), 0);
+    expect([...deck.fills.keys()].sort((a, b) => a - b)).toEqual([0, 4, 14]);
+    const actions: unknown[] = [];
+    c.on('action', (action) => actions.push(action));
+    deck.press(14);
+    deck.press(0);
+    deck.press(4);
+    expect(actions).toEqual([
+      { kind: 'slot', index: 0 },
+      { kind: 'stop' },
+      { kind: 'workflow', id: 'debug' },
+    ]);
+    c.close();
   });
 
   it('updateSlot repaints only that key', () => {

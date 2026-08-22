@@ -13,6 +13,11 @@ export interface WorkflowKey {
   name: string;
 }
 
+export interface DeckLayoutEntry {
+  keyIndex: number;
+  action: KeyAction;
+}
+
 /**
  * 15-key (5×3) layout:
  *   row 0: slots 1–5
@@ -44,7 +49,22 @@ export function workflowKeyAssignments(workflows: WorkflowKey[]): {
   return assignments;
 }
 
-export function layoutActions(workflows: WorkflowKey[]): Map<number, KeyAction> {
+export function layoutActions(
+  workflows: WorkflowKey[],
+  customLayout?: DeckLayoutEntry[],
+): Map<number, KeyAction> {
+  if (customLayout !== undefined) {
+    const workflowIds = new Set(workflows.map((workflow) => workflow.id));
+    return new Map(
+      customLayout
+        .filter(({ keyIndex, action }) =>
+          keyIndex >= 0
+          && keyIndex < 15
+          && (action.kind !== 'slot' || (action.index >= 0 && action.index < 6))
+          && (action.kind !== 'workflow' || workflowIds.has(action.id)))
+        .map(({ keyIndex, action }) => [keyIndex, action]),
+    );
+  }
   const map = new Map<number, KeyAction>();
   SLOT_KEYS.forEach((key, i) => map.set(key, { kind: 'slot', index: i }));
   map.set(KEY_STOP, { kind: 'stop' });

@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import type { DeckLayoutEntry } from './deck/layout.js';
 
 export const DEFAULT_WORKFLOWS = [
   // 'do-it' is pinned to its own action-style key next to the slots
@@ -53,6 +54,37 @@ export const DeckSettingsSchema = z.object({
 export type DeckSettings = z.infer<typeof DeckSettingsSchema>;
 export const DEFAULT_DECK_SETTINGS: DeckSettings = DeckSettingsSchema.parse({});
 
+const KeyActionSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('slot'), index: z.number().int().min(0).max(5) }),
+  z.object({ kind: z.literal('stop') }),
+  z.object({ kind: z.literal('sleep') }),
+  z.object({ kind: z.literal('attach') }),
+  z.object({ kind: z.literal('workflow'), id: z.string().min(1) }),
+]);
+
+export const DeckLayoutSchema = z.array(z.object({
+  keyIndex: z.number().int().min(0).max(14),
+  action: KeyActionSchema,
+})).max(15).superRefine((layout, context) => {
+  const keys = new Set<number>();
+  const actions = new Set<string>();
+  for (const entry of layout) {
+    const actionId = entry.action.kind === 'slot'
+      ? `slot:${entry.action.index}`
+      : entry.action.kind === 'workflow'
+        ? `workflow:${entry.action.id}`
+        : entry.action.kind;
+    if (keys.has(entry.keyIndex)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: `key ${entry.keyIndex} is assigned more than once` });
+    }
+    if (actions.has(actionId)) {
+      context.addIssue({ code: z.ZodIssueCode.custom, message: `${actionId} is assigned more than once` });
+    }
+    keys.add(entry.keyIndex);
+    actions.add(actionId);
+  }
+});
+
 const AppServerUrlSchema = z.string().url().refine((value) => {
   const url = new URL(value);
   const loopback =
@@ -92,6 +124,8 @@ export const ConfigSchema = z.object({
     })
     .default({}),
   deck: DeckSettingsSchema.default({}),
+  /** Optional complete key map. Omitted uses the standard 15-key layout. */
+  layout: DeckLayoutSchema.optional(),
   codex: z
     .object({
       model: z.string().optional(),
@@ -168,6 +202,24 @@ export function saveDeckSettings(
     // missing or unreadable file → start from defaults
   }
   raw.deck = settings;
+  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
+}
+
+/** Persist the physical/virtual key map while preserving all unrelated settings. */
+export function saveDeckLayout(
+  sourcePath: string | null,
+  layout: DeckLayoutEntry[],
+): string {
+  const path = sourcePath ?? 'config.json';
+  let raw: Record<string, unknown> = {};
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  } catch {
+    // missing or unreadable file → start from defaults
+  }
+  raw.layout = layout;
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;

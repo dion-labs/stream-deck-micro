@@ -6,8 +6,10 @@ import {
   IPC_SOCKET,
   STATE_FILE,
   DeckSettingsSchema,
+  DeckLayoutSchema,
   loadConfig,
   saveDeckSettings,
+  saveDeckLayout,
   saveWorkflows,
   WorkflowSchema,
   type SurfaceMode,
@@ -145,8 +147,8 @@ export async function runDaemon(
   const workflows = config.workflows.map(({ id, name }) => ({ id, name }));
   const virtualDeck = surfaceMode === 'marketplace' ? new VirtualDeckDriver() : null;
   const deck = virtualDeck
-    ? new DeckController(virtualDeck, workflows, config.deck)
-    : DeckController.open(workflows, config.deck);
+    ? new DeckController(virtualDeck, workflows, config.deck, config.layout)
+    : DeckController.open(workflows, config.deck, config.layout);
 
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
@@ -418,6 +420,20 @@ export async function runDaemon(
         config.deck = settings;
         deck.setSettings(settings);
         log(`deck settings saved to ${path}`);
+        return { ...deck.status(), path };
+      }
+      case 'deck.layout.set': {
+        const layout = DeckLayoutSchema.parse(args.layout);
+        const workflowIds = new Set(config.workflows.map((workflow) => workflow.id));
+        const unknownWorkflow = layout.find(({ action }) =>
+          action.kind === 'workflow' && !workflowIds.has(action.id));
+        if (unknownWorkflow?.action.kind === 'workflow') {
+          throw new Error(`unknown workflow: ${unknownWorkflow.action.id}`);
+        }
+        const path = saveDeckLayout(sourcePath, layout);
+        config.layout = layout;
+        deck.setLayout(layout);
+        log(`deck layout saved to ${path}`);
         return { ...deck.status(), path };
       }
       case 'deck.sleep':

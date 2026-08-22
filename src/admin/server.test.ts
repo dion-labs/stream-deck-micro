@@ -68,4 +68,15 @@ describe('Control Room server', () => {
     expect(response.status).toBe(200);
     expect(calls).toEqual(['stop']);
   });
+
+  it('ships safe configure mode and sends STOP as a mutation', async () => {
+    server = await startAdminServer(0, async () => ({}));
+    const response = await fetch(server.url);
+    const html = await response.text();
+
+    expect(html).toContain("var controlMode = 'configure'");
+    expect(html).toContain("api('stop', {})");
+    expect(html).toContain('drag to reorder');
+    expect(html).toContain('Live control');
+  });
 });

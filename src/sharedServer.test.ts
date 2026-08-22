@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ConfigSchema, saveAppServerUrl, saveSurfaceMode } from './config.js';
+import { ConfigSchema, DeckLayoutSchema, saveAppServerUrl, saveSurfaceMode } from './config.js';
 import {
   launchAgentPlist,
   processListHasDesktopPrivateAppServer,
@@ -16,6 +16,17 @@ afterEach(() => {
 });
 
 describe('shared App Server setup', () => {
+  it('rejects duplicate layout positions and actions', () => {
+    expect(DeckLayoutSchema.safeParse([
+      { keyIndex: 0, action: { kind: 'stop' } },
+      { keyIndex: 0, action: { kind: 'attach' } },
+    ]).success).toBe(false);
+    expect(DeckLayoutSchema.safeParse([
+      { keyIndex: 0, action: { kind: 'stop' } },
+      { keyIndex: 1, action: { kind: 'stop' } },
+    ]).success).toBe(false);
+  });
+
   it('accepts only explicit loopback WebSocket endpoints', () => {
     expect(validateLoopbackEndpoint('ws://127.0.0.1:17532')).toBe('ws://127.0.0.1:17532');
     expect(

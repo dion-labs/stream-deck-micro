@@ -47,7 +47,7 @@ Independent HID ──── bridge ┘
 | Device ownership | Elgato Stream Deck app | Stream Deck Micro opens HID directly |
 | Session/workflow parity | Full | Full |
 | Sleep behavior | Keys render black; first press wakes and is consumed | Hardware brightness reaches zero; first press wakes and is consumed |
-| Profiles | Editable official Elgato profile | Fixed project-managed 5×3 layout |
+| Profiles | Editable official Elgato profile plus shared Control Room layout | Configurable project-managed 5×3 layout |
 | Background operation | Per-user LaunchAgent | Foreground daemon by default |
 | Elgato app | Must be running | Must be quit |
 
@@ -253,16 +253,21 @@ wakes the deck.
 The Control Room is served only on `127.0.0.1`. It mirrors the physical 5×3
 deck and lets you:
 
+- start in safe **Configure** mode, where clicks only inspect keys and never run actions;
+- drag any key to swap positions and assign slot, system, or workflow functions directly;
+- opt into **Live control** when the browser deck should execute exactly like the hardware;
 - inspect and rename slots;
 - stop or remove a bound session;
 - search Codex sessions and attach one to a free slot;
-- edit, reorder, run, park, and reactivate workflow prompts;
+- edit, explicitly run, park, and reactivate workflow prompts;
 - configure brightness, auto-sleep timing, and the sleep-key behavior;
 - sleep or wake the physical deck immediately;
 - review recent state changes.
 
 Its API rejects unexpected hosts and origins and requires a fresh process-local
 token embedded in the page. It is not designed for LAN or internet exposure.
+Layout changes save immediately to the active configuration and repaint both
+editions; Configure mode is restored whenever the page is opened or reloaded.
 
 The shared Codex endpoint is also bound to loopback only. The installer rejects
 non-local or authenticated URLs rather than exposing control of Codex sessions
