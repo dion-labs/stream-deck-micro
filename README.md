@@ -2,15 +2,17 @@
 
 Turn an Elgato Stream Deck MK.2 into a local command center for Codex sessions.
 Six live slot keys show what your agents are doing; the remaining keys sleep,
-interrupt, attach, and launch reusable workflows. A localhost Control Room keeps
-the physical deck, Codex sessions, and workflow configuration in sync.
+interrupt, attach, and launch reusable workflows. Choose the official Elgato
+Marketplace surface or the independent direct-HID surface; both use the same
+local bridge, Control Room, sessions, and behavior model.
 
 [Project site](https://deck.dionlabs.ai) ·
 [Sponsor Dion Labs](https://github.com/sponsors/dion-labs)
 
 > [!IMPORTANT]
-> Stream Deck Micro is an independent, unofficial interoperability project. It
-> is not affiliated with or endorsed by OpenAI, Work Louder, or Elgato. Codex,
+> Stream Deck Micro is an independent, unofficial interoperability project. Its
+> Marketplace edition uses Elgato's official plugin SDK, but the project is not
+> affiliated with or endorsed by OpenAI, Work Louder, or Elgato. Codex,
 > Codex Micro, Stream Deck, and related marks belong to their respective owners.
 
 ## What it does
@@ -22,6 +24,7 @@ the physical deck, Codex sessions, and workflow configuration in sync.
 - Provides a local Control Room for session assignment, labels, and workflow editing.
 - Keeps session bindings and custom labels across daemon restarts.
 - Wakes for activity, holds completed work for acknowledgement, and sleeps when quiet.
+- Runs either inside the Elgato app or as a standalone direct-HID controller.
 
 The project uses the
 [Codex App Server](https://developers.openai.com/codex/app-server) interface for
@@ -30,10 +33,28 @@ Micro connect to one local WebSocket App Server, so both can read and control
 the same session without competing for its writer lock.
 
 ```text
-Codex Desktop ─┐
-               ├── ws://127.0.0.1:17532 ── Codex sessions
-Stream Deck ───┘
+Codex Desktop ───────────────┐
+                            ├── ws://127.0.0.1:17532 ── Codex sessions
+Marketplace plugin ─ bridge ┤
+Independent HID ──── bridge ┘
 ```
+
+## Choose an edition
+
+| | Marketplace edition | Independent edition |
+| --- | --- | --- |
+| Best for | Familiar Elgato app and plugin workflow | Maximum local control and minimal stack |
+| Device ownership | Elgato Stream Deck app | Stream Deck Micro opens HID directly |
+| Session/workflow parity | Full | Full |
+| Sleep behavior | Keys render black; first press wakes and is consumed | Hardware brightness reaches zero; first press wakes and is consumed |
+| Profiles | Editable official Elgato profile | Fixed project-managed 5×3 layout |
+| Background operation | Per-user LaunchAgent | Foreground daemon by default |
+| Elgato app | Must be running | Must be quit |
+
+See [Edition guide](docs/editions.md) for the detailed tradeoffs and switching
+instructions. The Marketplace edition intentionally does not hide its one SDK
+gap: Elgato's documented plugin API does not expose device-wide brightness, so
+sleep is visually simulated instead of changing hardware brightness.
 
 ## Requirements
 
@@ -42,10 +63,14 @@ Stream Deck ───┘
 - Codex Desktop, installed and authenticated
 - Elgato Stream Deck MK.2, 15-key model
 
-Quit the Elgato Stream Deck application before starting. It normally owns the
-HID device exclusively, so two applications cannot drive the deck at once.
+The Marketplace edition also requires Elgato Stream Deck 7.1 or newer. The
+Independent edition requires the Elgato app to be quit because the two processes
+cannot own the HID device at the same time.
 
 ## Install
+
+The npm package and Marketplace listing are not published yet. Until they are,
+install the local bridge from source:
 
 ```bash
 git clone https://github.com/dion-labs/stream-deck-micro.git
@@ -53,22 +78,48 @@ cd stream-deck-micro
 npm ci
 npm run build
 npm link
-stream-deck-micro shared install
 ```
 
-The npm package is not published yet. Until it is, install from source as shown
-above so every command in this guide works as written.
+### Marketplace edition
+
+Build and link the official Elgato plugin, then install its persistent local
+bridge:
+
+```bash
+npm run marketplace:install
+npm run marketplace:build
+npm --prefix marketplace run link
+stream-deck-micro marketplace install
+open "marketplace/ai.dionlabs.stream-deck-micro.sdPlugin/profiles/Stream Deck Micro.streamDeckProfile"
+```
+
+Accept the profile import in the Elgato app. The released Marketplace package
+will prompt to install this profile automatically; the explicit `open` command
+is only needed for source-linked development installs.
+
+`marketplace install` also installs shared Codex mode, selects the Marketplace
+surface in the config, and starts a per-user LaunchAgent. Inspect it at any time:
+
+```bash
+stream-deck-micro marketplace status
+stream-deck-micro doctor --marketplace
+```
+
+### Independent edition
+
+Install shared Codex mode, fully quit the Elgato app, and run the direct-HID
+daemon:
+
+```bash
+stream-deck-micro marketplace uninstall # only when switching from Marketplace
+stream-deck-micro shared install
+stream-deck-micro doctor
+stream-deck-micro start
+```
 
 After `shared install`, fully quit Codex Desktop with **Codex → Quit Codex** and
 open it again. Closing only the window is not enough. This one-time restart
 makes Desktop inherit the shared App Server endpoint.
-
-Then verify the complete setup and start the deck daemon:
-
-```bash
-stream-deck-micro doctor
-stream-deck-micro start
-```
 
 The installer:
 
@@ -90,6 +141,8 @@ stream-deck-micro shared uninstall
 After uninstalling, fully quit and reopen Codex Desktop. The uninstall command
 stops the shared server, removes both LaunchAgents, clears Desktop routing, and
 removes only the shared endpoint from the Stream Deck Micro configuration.
+Removing the Marketplace bridge does not remove shared mode, because the
+Independent edition uses the same shared server.
 
 ## Configure
 
@@ -188,9 +241,12 @@ attention state; after the timeout, non-attention keys turn black and only those
 slots remain visible. Press an attention slot to acknowledge it and select that
 session. Starting a new turn in the session also acknowledges the previous result.
 
-When no slot needs attention, the timeout sets device brightness to zero. The
-first physical key press restores the deck and is deliberately consumed, so it
-cannot accidentally run a workflow. Any later status change also wakes the deck.
+When no slot needs attention, the timeout sleeps the surface. The Independent
+edition sets device brightness to zero; the Marketplace edition renders every
+plugin key black because global brightness is not available to plugins. In both
+editions, the first physical key press restores the surface and is deliberately
+consumed, so it cannot accidentally run a workflow. Any later status change also
+wakes the deck.
 
 ## Control Room
 
@@ -237,6 +293,12 @@ npm run dev
 npm test
 npm run build
 npm pack --dry-run
+
+npm run marketplace:install
+npm run marketplace:build
+npm --prefix marketplace test
+npm run marketplace:validate
+npm run marketplace:pack
 ```
 
 The current suite covers the state machine, slot manager, both Codex adapters,
@@ -252,6 +314,7 @@ src/
   cli/                      installer-facing commands and sdm companion CLI
   ipc.ts                    local Unix-socket control plane
   main.ts                   daemon wiring and persistence
+marketplace/                official Elgato SDK plugin, profile, and package
 ```
 
 To add another agent harness, implement `HarnessAdapter`. To add another device,
@@ -261,7 +324,12 @@ machine.
 ## Known limitations
 
 - v1 supports only the 15-key Stream Deck MK.2 on macOS.
-- The Elgato application must be closed while the daemon owns the device.
+- The Marketplace package is implemented and validator-clean but has not yet
+  completed Elgato Maker Console review.
+- Marketplace sleep blacks out plugin-owned keys but cannot set global device
+  brightness; the Independent edition provides true brightness-zero sleep.
+- The Elgato application must be closed only while the Independent edition owns
+  the device.
 - Codex Desktop must be fully restarted after shared mode is installed or
   removed. A Desktop version that does not support its WebSocket endpoint hook
   can still be observed through the polling fallback, but cannot share writes.

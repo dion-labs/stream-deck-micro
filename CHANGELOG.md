@@ -14,3 +14,9 @@ Versioning once it reaches 1.0.
   control the same session concurrently.
 - Install, inspect, and remove the shared server through reversible LaunchAgent
   lifecycle commands.
+- Add a validator-clean Elgato Marketplace plugin with an editable bundled
+  15-key profile and live SVG rendering.
+- Add a headless Marketplace surface and reversible background bridge service
+  while retaining the Independent direct-HID edition.
+- Preserve sleep, wake swallowing, attention-only mode, workflows, and shared
+  session control across both editions.

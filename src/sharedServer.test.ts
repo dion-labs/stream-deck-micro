@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ConfigSchema, saveAppServerUrl } from './config.js';
+import { ConfigSchema, saveAppServerUrl, saveSurfaceMode } from './config.js';
 import {
   launchAgentPlist,
   processListHasDesktopPrivateAppServer,
@@ -66,6 +66,19 @@ describe('shared App Server setup', () => {
 
     expect(() => saveAppServerUrl(path, 'ws://127.0.0.1:17532')).toThrow('invalid config');
     expect(readFileSync(path, 'utf8')).toBe('{ not-json');
+  });
+
+  it('selects an edition without discarding unrelated configuration', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sdm-surface-'));
+    tempDirs.push(dir);
+    const path = join(dir, 'config.json');
+    writeFileSync(path, JSON.stringify({ custom: 'kept', surface: { note: 'kept' } }));
+
+    saveSurfaceMode(path, 'marketplace');
+    const saved = JSON.parse(readFileSync(path, 'utf8')) as Record<string, any>;
+    expect(saved.custom).toBe('kept');
+    expect(saved.surface).toEqual({ note: 'kept', mode: 'marketplace' });
+    expect(ConfigSchema.parse(saved).surface.mode).toBe('marketplace');
   });
 
   it('only treats a private stdio server owned by Desktop as restart evidence', () => {

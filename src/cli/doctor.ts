@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { platform, release } from 'node:os';
 import { listStreamDecks } from 'elgato-stream-deck';
-import { APP_DIR, IPC_SOCKET, loadConfig } from '../config.js';
+import { APP_DIR, IPC_SOCKET, loadConfig, type SurfaceMode } from '../config.js';
 import { DESKTOP_ENDPOINT_ENV, desktopUsesPrivateAppServer } from '../sharedServer.js';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
@@ -30,8 +30,12 @@ function elgatoAppIsRunning(): boolean {
   return Boolean(processes?.includes('/Applications/Elgato Stream Deck.app/'));
 }
 
-export function collectDoctorChecks(explicitConfigPath?: string): DoctorCheck[] {
+export function collectDoctorChecks(
+  explicitConfigPath?: string,
+  surfaceOverride?: SurfaceMode,
+): DoctorCheck[] {
   const checks: DoctorCheck[] = [];
+  let surfaceMode: SurfaceMode = surfaceOverride ?? 'independent';
   const major = Number(process.versions.node.split('.')[0]);
   checks.push({
     name: 'Node.js',
@@ -54,6 +58,7 @@ export function collectDoctorChecks(explicitConfigPath?: string): DoctorCheck[] 
 
   try {
     const { config, sourcePath } = loadConfig(explicitConfigPath);
+    surfaceMode = surfaceOverride ?? config.surface.mode;
     checks.push({
       name: 'Configuration',
       status: 'pass',
@@ -127,7 +132,7 @@ export function collectDoctorChecks(explicitConfigPath?: string): DoctorCheck[] 
     const supported = devices.filter((device) => device.model === 'original-mk2');
     checks.push({
       name: 'Stream Deck MK.2',
-      status: supported.length ? 'pass' : 'fail',
+      status: supported.length ? 'pass' : surfaceMode === 'marketplace' ? 'warn' : 'fail',
       detail: supported.length
         ? `${supported.length} compatible device${supported.length === 1 ? '' : 's'} detected`
         : devices.length
@@ -145,10 +150,16 @@ export function collectDoctorChecks(explicitConfigPath?: string): DoctorCheck[] 
   const elgatoRunning = elgatoAppIsRunning();
   checks.push({
     name: 'Elgato Stream Deck app',
-    status: elgatoRunning ? 'fail' : 'pass',
-    detail: elgatoRunning
-      ? 'quit the Elgato app so Stream Deck Micro can open the HID device'
-      : 'not holding the device',
+    status: surfaceMode === 'marketplace'
+      ? elgatoRunning ? 'pass' : 'fail'
+      : elgatoRunning ? 'fail' : 'pass',
+    detail: surfaceMode === 'marketplace'
+      ? elgatoRunning
+        ? 'running and available to host the Marketplace plugin'
+        : 'open the Elgato app to host the Marketplace plugin'
+      : elgatoRunning
+        ? 'quit the Elgato app so Stream Deck Micro can open the HID device'
+        : 'not holding the device',
   });
 
   checks.push({

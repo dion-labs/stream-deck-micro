@@ -34,6 +34,7 @@ export type AttentionState = 'done' | 'error';
 export interface DeckStatus {
   mode: DeckMode;
   settings: DeckSettings;
+  layout: { keyIndex: number; action: KeyAction }[];
   attention: { index: number; state: AttentionState; sessionId: string | null }[];
   autoSleepDueAt: number | null;
 }
@@ -124,6 +125,7 @@ export class DeckController {
     return {
       mode: this.mode,
       settings: cloneSettings(this.settings),
+      layout: [...layoutActions(this.workflows)].map(([keyIndex, action]) => ({ keyIndex, action })),
       attention: [...this.attention.entries()].map(([index, state]) => ({
         index,
         state,

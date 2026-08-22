@@ -48,6 +48,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run build && npm run test",
+    "marketplace:install": "npm --prefix marketplace ci",
+    "marketplace:build": "npm --prefix marketplace run build",
+    "marketplace:validate": "npm --prefix marketplace run validate",
+    "marketplace:pack": "npm --prefix marketplace run pack",
     "prepack": "npm run build"
   },
   "dependencies": {

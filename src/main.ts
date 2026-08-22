@@ -10,6 +10,7 @@ import {
   saveDeckSettings,
   saveWorkflows,
   WorkflowSchema,
+  type SurfaceMode,
 } from './config.js';
 import { SlotManager } from './core/slotManager.js';
 import type { AgentSession, AgentSlotSnapshot, HarnessAdapter } from './core/types.js';
@@ -20,6 +21,7 @@ import {
   type MonitoredThread,
 } from './harness/codex-app-server/adapter.js';
 import { DeckController, type AttentionState } from './deck/controller.js';
+import { VirtualDeckDriver } from './deck/virtualDriver.js';
 import { serveIpc } from './ipc.js';
 import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
@@ -112,8 +114,16 @@ function notify(title: string, body: string): void {
   );
 }
 
-export async function runDaemon(explicitConfigPath?: string): Promise<void> {
+export interface RunDaemonOptions {
+  surfaceMode?: SurfaceMode;
+}
+
+export async function runDaemon(
+  explicitConfigPath?: string,
+  options: RunDaemonOptions = {},
+): Promise<void> {
   const { config, sourcePath } = loadConfig(explicitConfigPath);
+  const surfaceMode = options.surfaceMode ?? config.surface.mode;
   const adapter: HarnessAdapter =
     config.harness === 'codex-app-server'
       ? new AppServerAdapter({
@@ -132,10 +142,11 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
     slotCount: config.slots.count,
     defaultCwd: config.slots.cwd,
   });
-  const deck = DeckController.open(
-    config.workflows.map(({ id, name }) => ({ id, name })),
-    config.deck,
-  );
+  const workflows = config.workflows.map(({ id, name }) => ({ id, name }));
+  const virtualDeck = surfaceMode === 'marketplace' ? new VirtualDeckDriver() : null;
+  const deck = virtualDeck
+    ? new DeckController(virtualDeck, workflows, config.deck)
+    : DeckController.open(workflows, config.deck);
 
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
@@ -270,7 +281,10 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
       throw e;
     }
   }
-  log(`daemon up — ${config.slots.count} slots, ${config.workflows.length} workflows, ipc at ${IPC_SOCKET}`);
+  log(
+    `daemon up — ${surfaceMode} surface, ${config.slots.count} slots, `
+    + `${config.workflows.length} workflows, ipc at ${IPC_SOCKET}`,
+  );
 
   let adminServer: AdminServer | null = null;
   if (config.admin.enabled) {
@@ -317,6 +331,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
         return {
           selectedIndex: manager.selectedIndex,
           harness: adapter.name,
+          surface: surfaceMode,
           slots: manager.snapshots(),
           workflows: config.workflows,
           deck: deck.status(),
@@ -411,6 +426,15 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
       case 'deck.wake':
         deck.wake();
         return deck.status();
+      case 'deck.key': {
+        if (!virtualDeck) throw new Error('deck.key is only available in marketplace surface mode');
+        const index = Number(args.index);
+        if (!Number.isInteger(index) || index < 0 || index >= virtualDeck.NUM_KEYS) {
+          throw new Error(`index must be 0..${virtualDeck.NUM_KEYS - 1}`);
+        }
+        virtualDeck.press(index);
+        return deck.status();
+      }
       default:
         throw new Error(`unknown cmd: ${cmd}`);
     }

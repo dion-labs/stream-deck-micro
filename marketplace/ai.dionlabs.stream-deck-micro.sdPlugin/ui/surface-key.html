@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Stream Deck Micro</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 14px; color: #f4f2fa; background: #2d2d2d; font-size: 13px; }
+    .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    .mark { display: grid; grid-template-columns: repeat(3, 6px); gap: 2px; padding: 7px; border-radius: 8px; background: linear-gradient(145deg,#7c3aed,#174d35); }
+    .mark i { width: 6px; height: 6px; border-radius: 2px; background: rgba(255,255,255,.88); }
+    h1 { margin: 0; font-size: 14px; letter-spacing: -.01em; }
+    .muted { color: #aaa6b2; font-size: 11px; margin-top: 2px; }
+    .card { border: 1px solid #505055; border-radius: 8px; padding: 11px; background: #353539; margin-bottom: 10px; }
+    .status { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #d97706; box-shadow: 0 0 0 3px rgba(217,119,6,.14); }
+    .dot.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.14); }
+    .message { margin: 7px 0 0 16px; color: #b8b4c0; font-size: 11px; line-height: 1.4; }
+    .row { display: flex; justify-content: space-between; gap: 12px; }
+    .value { color: #d7d2e2; font-weight: 600; text-align: right; }
+    code { display: block; margin-top: 8px; padding: 8px; border-radius: 6px; background: #202024; color: #d9ccff; font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; user-select: all; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    a { display: block; padding: 8px 10px; border: 1px solid #57515f; border-radius: 6px; color: #f4efff; text-align: center; text-decoration: none; background: #41394d; font-weight: 650; }
+    a.primary { border-color: #7251aa; background: #59398c; }
+  </style>
+</head>
+<body>
+  <div class="brand">
+    <span class="mark" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    <div><h1>Stream Deck Micro</h1><div class="muted">Marketplace edition</div></div>
+  </div>
+  <div class="card">
+    <div class="status"><span class="dot" id="dot"></span><span id="status">Checking local bridge…</span></div>
+    <div class="message" id="message">The profile connects to the same local sessions and Control Room as the independent edition.</div>
+  </div>
+  <div class="card">
+    <div class="row"><span>Position role</span><span class="value" id="role">Surface key</span></div>
+    <div class="row" style="margin-top:7px"><span>Deck mode</span><span class="value" id="mode">—</span></div>
+    <code>stream-deck-micro start --marketplace</code>
+  </div>
+  <div class="actions">
+    <a href="http://127.0.0.1:17531" target="_blank">Control Room</a>
+    <a class="primary" href="https://deck.dionlabs.ai/#install" target="_blank">Setup guide</a>
+  </div>
+  <script>
+    const roles = ['AG1','AG2','AG3','AG4','AG5','AG6','STATUS','STOP','ATTACH','TESTS','REVIEW','DEBUG','REFACTOR','SLEEP','DO IT'];
+    window.connectElgatoStreamDeckSocket = (port, uuid, event, info, actionInfo) => {
+      const details = JSON.parse(actionInfo);
+      const c = details.payload && details.payload.coordinates;
+      if (c) document.getElementById('role').textContent = roles[c.row * 5 + c.column] || 'Unassigned';
+      const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ event, uuid }));
+        socket.send(JSON.stringify({ event: 'sendToPlugin', action: details.action, context: uuid, payload: { type: 'status' } }));
+      };
+      socket.onmessage = ({ data }) => {
+        const message = JSON.parse(data);
+        if (message.event !== 'sendToPropertyInspector') return;
+        const payload = message.payload || {};
+        document.getElementById('dot').classList.toggle('on', Boolean(payload.connected));
+        document.getElementById('status').textContent = payload.connected ? 'Bridge connected' : 'Setup needed';
+        document.getElementById('message').textContent = payload.message || 'Local bridge unavailable';
+        document.getElementById('mode').textContent = payload.mode || 'offline';
+      };
+    };
+  </script>
+</body>
+</html>

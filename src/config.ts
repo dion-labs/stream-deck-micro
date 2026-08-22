@@ -63,6 +63,12 @@ const AppServerUrlSchema = z.string().url().refine((value) => {
 }, 'must use an unauthenticated loopback ws:// URL with an explicit port');
 
 export const ConfigSchema = z.object({
+  /** Who owns key input/output: this process over HID, or the official Elgato plugin. */
+  surface: z
+    .object({
+      mode: z.enum(['independent', 'marketplace']).default('independent'),
+    })
+    .default({}),
   harness: z.enum(['codex', 'codex-app-server']).default('codex'),
   slots: z
     .object({
@@ -100,6 +106,7 @@ export const ConfigSchema = z.object({
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
+export type SurfaceMode = Config['surface']['mode'];
 
 export interface LoadedConfig {
   config: Config;
@@ -188,6 +195,28 @@ export function saveAppServerUrl(explicitPath: string | undefined, url: string |
     if (Object.keys(appServer).length) raw.appServer = appServer;
     else delete raw.appServer;
   }
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
+}
+
+/** Select an edition without discarding any user-owned configuration keys. */
+export function saveSurfaceMode(
+  explicitPath: string | undefined,
+  mode: SurfaceMode,
+): string {
+  const path = explicitPath
+    ?? (existsSync('config.json') ? 'config.json' : join(APP_DIR, 'config.json'));
+  let raw: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    } catch (error) {
+      throw new Error(`cannot update invalid config at ${path}: ${String(error)}`);
+    }
+  }
+  raw.surface = { ...(isRecord(raw.surface) ? raw.surface : {}), mode };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);

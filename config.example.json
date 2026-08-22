@@ -1,4 +1,7 @@
 {
+  "surface": {
+    "mode": "independent"
+  },
   "harness": "codex-app-server",
   "attachExternal": true,
   "appServer": {

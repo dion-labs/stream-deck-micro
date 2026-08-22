@@ -1,0 +1,33 @@
+{
+  "name": "@dion-labs/stream-deck-micro-marketplace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/generate-assets.mjs",
+    "build": "npm run assets && rollup -c",
+    "watch": "npm run assets && rollup -c -w --watch.onEnd=\"streamdeck restart ai.dionlabs.stream-deck-micro\"",
+    "test": "vitest run",
+    "link": "streamdeck link ai.dionlabs.stream-deck-micro.sdPlugin",
+    "validate": "npm run build && streamdeck validate ai.dionlabs.stream-deck-micro.sdPlugin",
+    "pack": "npm run validate && streamdeck pack ai.dionlabs.stream-deck-micro.sdPlugin"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "^2.1.2",
+    "@elgato/utils": "^0.6.0"
+  },
+  "devDependencies": {
+    "@elgato/cli": "^1.9.0",
+    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-node-resolve": "^15.2.2",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@rollup/plugin-typescript": "^12.1.0",
+    "@tsconfig/node20": "^20.1.2",
+    "@types/node": "~24.1.0",
+    "@napi-rs/canvas": "^1.0.7",
+    "rollup": "^4.0.2",
+    "tslib": "^2.6.2",
+    "typescript": "^5.2.2",
+    "vitest": "^4.1.11"
+  }
+}
