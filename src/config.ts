@@ -101,7 +101,7 @@ export const ConfigSchema = z.object({
       mode: z.enum(['independent', 'marketplace']).default('independent'),
     })
     .default({}),
-  harness: z.enum(['codex', 'codex-app-server']).default('codex'),
+  harness: z.literal('codex-app-server').default('codex-app-server'),
   slots: z
     .object({
       count: z.number().int().min(1).max(15).default(15),
@@ -128,10 +128,8 @@ export const ConfigSchema = z.object({
   layout: DeckLayoutSchema.optional(),
   codex: z
     .object({
-      model: z.string().optional(),
       sandboxMode: z.enum(['read-only', 'workspace-write', 'danger-full-access']).default('danger-full-access'),
       approvalPolicy: z.enum(['never', 'on-request', 'on-failure', 'untrusted']).default('never'),
-      modelReasoningEffort: z.string().optional(),
     })
     .default({}),
   workflows: z.array(WorkflowSchema).default(DEFAULT_WORKFLOWS),

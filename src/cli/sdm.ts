@@ -25,7 +25,7 @@ usage:
   sdm clear [1-15]           clear a slot (default: selected)
   sdm rename <1-15> <label|-> set or clear a custom slot label
   sdm workflow <id>          run a workflow on the selected slot
-  sdm sessions               list codex sessions (app-server harness)
+  sdm sessions               list Codex sessions
   sdm attach [id]            attach newest (or given) session to a free slot
 `;
 

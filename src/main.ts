@@ -15,8 +15,7 @@ import {
   type SurfaceMode,
 } from './config.js';
 import { SlotManager } from './core/slotManager.js';
-import type { AgentSession, AgentSlotSnapshot, HarnessAdapter } from './core/types.js';
-import { CodexAdapter } from './harness/codex/adapter.js';
+import type { AgentSession, AgentSlotSnapshot } from './core/types.js';
 import {
   AppServerAdapter,
   WriterHeldError,
@@ -126,20 +125,12 @@ export async function runDaemon(
 ): Promise<void> {
   const { config, sourcePath } = loadConfig(explicitConfigPath);
   const surfaceMode = options.surfaceMode ?? config.surface.mode;
-  const adapter: HarnessAdapter =
-    config.harness === 'codex-app-server'
-      ? new AppServerAdapter({
-          approvalPolicy: config.codex.approvalPolicy,
-          sandbox: config.codex.sandboxMode,
-          endpoint: config.appServer.url,
-        })
-      : new CodexAdapter({
-          model: config.codex.model,
-          sandboxMode: config.codex.sandboxMode,
-          approvalPolicy: config.codex.approvalPolicy,
-          modelReasoningEffort: config.codex.modelReasoningEffort,
-        });
-  const appServer = adapter instanceof AppServerAdapter ? adapter : null;
+  const adapter = new AppServerAdapter({
+    approvalPolicy: config.codex.approvalPolicy,
+    sandbox: config.codex.sandboxMode,
+    endpoint: config.appServer.url,
+  });
+  const appServer = adapter;
   const manager = new SlotManager(adapter, {
     slotCount: config.slots.count,
     defaultCwd: config.slots.cwd,

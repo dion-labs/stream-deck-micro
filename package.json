@@ -56,7 +56,6 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.7",
-    "@openai/codex-sdk": "^0.149.0",
     "elgato-stream-deck": "^4.3.0",
     "zod": "^3.24.0"
   },

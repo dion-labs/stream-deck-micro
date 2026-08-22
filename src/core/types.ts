@@ -2,8 +2,8 @@
  * Harness-agnostic core types.
  *
  * Everything in src/core knows nothing about Codex or the Stream Deck; it deals
- * only in agent sessions, states and workflows. A harness (Codex, Claude Code,
- * ...) plugs in by implementing HarnessAdapter in src/harness/.
+ * only in agent sessions, states and workflows. An agent harness plugs in by
+ * implementing HarnessAdapter in src/harness/.
  */
 
 /** Lifecycle of a slot, mirrored 1:1 onto key colors. Ordered by precedence, low → high. */
@@ -15,7 +15,7 @@ export type AgentState =
   | 'done' // turn just completed (transient, flashes then returns to idle)
   | 'error'; // turn failed or stream errored (transient, then idle)
 
-/** A session as listed by a harness's session store (e.g. ~/.codex/sessions). */
+/** A session as listed by a harness's session store. */
 export interface SessionInfo {
   id: string;
   name?: string;

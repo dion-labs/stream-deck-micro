@@ -317,13 +317,12 @@ npm run marketplace:validate
 npm run marketplace:pack
 ```
 
-The current suite covers the state machine, slot manager, both Codex adapters,
+The current suite covers the state machine, slot manager, shared Codex adapter,
 deck layout/rendering, and Control Room request security.
 
 ```text
 src/
   core/                     harness-neutral sessions, slots, and state
-  harness/codex/            Codex SDK execution adapter
   harness/codex-app-server/ App Server transports, adapter, and fallback monitor
   deck/                     Stream Deck MK.2 layout, rendering, and HID control
   admin/                    localhost Control Room and API boundary
@@ -353,8 +352,6 @@ machine.
 - Codex App Server currently exposes no reliable Desktop “thread opened” event,
   so merely viewing a task in Desktop cannot clear deck attention. Press its slot
   key or begin the next turn to acknowledge it.
-- The legacy exec harness can leave descendant shell processes behind after an
-  interrupt; the app-server harness uses graceful turn interruption.
 
 ## License and support
 
