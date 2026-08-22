@@ -188,6 +188,29 @@ describe('SlotManager', () => {
     expect(m.snapshot(3).sessionId).toBe('abc-123');
   });
 
+  it('rejects duplicate session ids before resuming a second copy', async () => {
+    const { adapter } = makeAdapter();
+    const resume = vi.spyOn(adapter, 'resumeSession');
+    const m = manager(adapter);
+    await m.resumeSession(0, 'abc-123');
+    await expect(m.resumeSession(1, 'abc-123')).rejects.toThrow(
+      'already attached to slot 1',
+    );
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(m.snapshot(1).state).toBe('empty');
+  });
+
+  it('rejects duplicate directly attached sessions without replacing the target', () => {
+    const { adapter } = makeAdapter();
+    const m = manager(adapter);
+    const first = new FakeSession('abc-123');
+    const duplicate = new FakeSession('abc-123');
+    m.attachSession(0, first);
+    expect(() => m.attachSession(1, duplicate)).toThrow('already attached to slot 1');
+    expect(m.snapshot(0).sessionId).toBe('abc-123');
+    expect(m.snapshot(1).state).toBe('empty');
+  });
+
   it('a rejected send drives the state machine to error instead of sticking', async () => {
     const { adapter } = makeAdapter();
     const m = manager(adapter);

@@ -122,6 +122,7 @@ export class SlotManager {
   ): Promise<void> {
     const slot = this.slots[slotIndex];
     if (!slot) return;
+    this.assertSessionAvailable(slotIndex, sessionId);
     const session = await this.adapter.resumeSession(sessionId, {
       cwd: cwd ?? slot.cwd,
     });
@@ -150,6 +151,14 @@ export class SlotManager {
 
   private bind(index: number, session: AgentSession, cwd?: string): void {
     const slot = this.slots[index];
+    if (session.sessionId) {
+      try {
+        this.assertSessionAvailable(index, session.sessionId);
+      } catch (error) {
+        session.dispose();
+        throw error;
+      }
+    }
     this.detach(index);
     slot.session = session;
     if (cwd) slot.cwd = cwd;
@@ -158,6 +167,15 @@ export class SlotManager {
     slot.unsubscribe = session.onEvent((event) => this.onSessionEvent(index, event));
     if (session.name) slot.label = session.name;
     this.emitSlot(index);
+  }
+
+  private assertSessionAvailable(targetIndex: number, sessionId: string): void {
+    const existing = this.slots.find(
+      (slot) => slot.index !== targetIndex && slot.session?.sessionId === sessionId,
+    );
+    if (existing) {
+      throw new Error(`session ${sessionId} is already attached to slot ${existing.index + 1}`);
+    }
   }
 
   private detach(index: number): void {

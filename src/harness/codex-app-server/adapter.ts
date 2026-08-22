@@ -199,31 +199,43 @@ class AppServerSession implements AgentSession {
   }
 }
 
-/** A thread owned by another Codex window: visible on the deck, not drivable. */
+/**
+ * A thread currently owned by another Codex window. It remains observable and
+ * tries to acquire the writer lazily when the deck sends, so closing the other
+ * window does not require restarting this daemon.
+ */
 class MonitorSession implements AgentSession {
   private listeners = new Set<(e: SessionEvent) => void>();
-  private unsubscribe: () => void;
+  private monitorUnsubscribe: () => void;
+  private ownedUnsubscribe: (() => void) | null = null;
+  private owned: AgentSession | null = null;
+  private acquiring: Promise<AgentSession> | null = null;
+  private disposed = false;
 
   constructor(
     private readonly monitor: ExternalThreadMonitor,
     readonly threadId: string,
-    readonly name: string | null,
+    private readonly initialName: string | null,
+    private readonly acquire: () => Promise<AgentSession>,
   ) {
-    this.unsubscribe = monitor.watch(threadId, (e) => {
-      for (const l of this.listeners) l(e);
-    });
+    this.monitorUnsubscribe = monitor.watch(threadId, (e) => this.emit(e));
   }
 
   get sessionId(): string | null {
     return this.threadId;
   }
 
-  send(): Promise<void> {
-    return Promise.reject(new WriterHeldError(this.threadId));
+  get name(): string | null {
+    return this.owned?.name ?? this.initialName;
+  }
+
+  async send(prompt: string, signal?: AbortSignal): Promise<void> {
+    const session = await this.ensureOwned();
+    return session.send(prompt, signal);
   }
 
   interrupt(): void {
-    // writer is elsewhere; nothing to interrupt from here
+    this.owned?.interrupt();
   }
 
   onEvent(cb: (e: SessionEvent) => void): () => void {
@@ -232,8 +244,38 @@ class MonitorSession implements AgentSession {
   }
 
   dispose(): void {
-    this.unsubscribe();
+    this.disposed = true;
+    this.monitorUnsubscribe();
+    this.ownedUnsubscribe?.();
+    this.owned?.dispose();
     this.listeners.clear();
+  }
+
+  private async ensureOwned(): Promise<AgentSession> {
+    if (this.owned) return this.owned;
+    if (this.disposed) throw new Error(`session ${this.threadId} is disposed`);
+    if (this.acquiring) return this.acquiring;
+
+    const pending = this.acquire().then((session) => {
+      if (this.disposed) {
+        session.dispose();
+        throw new Error(`session ${this.threadId} is disposed`);
+      }
+      this.monitorUnsubscribe();
+      this.ownedUnsubscribe = session.onEvent((e) => this.emit(e));
+      this.owned = session;
+      return session;
+    });
+    this.acquiring = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.acquiring === pending) this.acquiring = null;
+    }
+  }
+
+  private emit(event: SessionEvent): void {
+    for (const listener of this.listeners) listener(event);
   }
 }
 
@@ -342,9 +384,11 @@ export class AppServerAdapter implements HarnessAdapter {
     }
   }
 
-  /** Bind an externally-owned thread as monitor-only (no writer). */
+  /** Bind an externally-owned thread and lazily re-acquire it when available. */
   monitorSession(thread: MonitoredThread): AgentSession {
-    const session = new MonitorSession(this.monitor, thread.id, thread.name ?? null);
+    const session = new MonitorSession(this.monitor, thread.id, thread.name ?? null, () =>
+      this.resumeSession(thread.id, { cwd: thread.cwd ?? process.cwd() }),
+    );
     this.monitor.provideThread(thread);
     return session;
   }

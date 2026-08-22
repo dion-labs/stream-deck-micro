@@ -87,8 +87,9 @@ export class ExternalThreadMonitor {
         const bumped = entry.lastUpdatedAt !== null && fresh.updatedAt !== entry.lastUpdatedAt;
         if (entry.lastUpdatedAt === null && fresh.updatedAt != null) {
           // first sighting: only treat as active if it updated within the quiet window
-          const ageSec = fresh.updatedAt - now / 1000;
-          if (ageSec < (this.opts.quietMs ?? 10000) / 1000) {
+          const ageSec = now / 1000 - fresh.updatedAt;
+          // updatedAt is normally whole Unix seconds, so allow its lost fractional second.
+          if (ageSec >= 0 && ageSec < (this.opts.quietMs ?? 10000) / 1000 + 1) {
             entry.lastBumpWallMs = now;
             await this.activate(entry);
           }

@@ -158,13 +158,43 @@ describe('AppServerAdapter', () => {
     expect(events).toContainEqual({ type: 'meta' });
   });
 
-  it('monitor sessions refuse to send', async () => {
+  it('externally-owned sessions preserve the writer-held error while still owned elsewhere', async () => {
     const conn = new FakeConn();
+    conn.respond('thread/resume', () => {
+      throw new Error('thread ext-1 already has an active writer');
+    });
     const adapter = adapterWith(conn);
-    const session = adapter.monitorSession({ id: 'ext-1', name: 'Rust Star' });
+    const session = adapter.monitorSession({ id: 'ext-1', name: 'Rust Star', cwd: '/tmp/rust' });
     expect(session.sessionId).toBe('ext-1');
     expect(session.name).toBe('Rust Star');
     await expect(session.send('hi')).rejects.toThrow(WriterHeldError);
+  });
+
+  it('re-acquires an externally-owned session on send after its writer is released', async () => {
+    const conn = new FakeConn();
+    conn.respond('thread/resume', () => ({ thread: { id: 'ext-1', name: 'Rust Star' } }));
+    conn.respond('turn/start', () => ({ turn: { id: 'turn-ext' } }));
+    const adapter = adapterWith(conn);
+    const session = adapter.monitorSession({ id: 'ext-1', name: 'Rust Star', cwd: '/tmp/rust' });
+    const events = await eventsOf(session);
+
+    const pending = session.send('do it');
+    await vi.waitFor(() => {
+      expect(conn.requests.some((request) => request.method === 'turn/start')).toBe(true);
+    });
+    conn.push('turn/started', { threadId: 'ext-1', turn: { id: 'turn-ext' } });
+    conn.push('turn/completed', {
+      threadId: 'ext-1',
+      turn: { id: 'turn-ext', status: 'completed' },
+    });
+
+    await expect(pending).resolves.toBeUndefined();
+    expect(conn.requests.find((request) => request.method === 'thread/resume')?.params).toEqual({
+      threadId: 'ext-1',
+      cwd: '/tmp/rust',
+    });
+    expect(events).toContainEqual({ type: 'turn-started' });
+    expect(events).toContainEqual({ type: 'turn-completed' });
   });
 
   it('listSessions maps thread records with preview fallback labels', async () => {
@@ -233,6 +263,22 @@ describe('classifyRolloutTail', () => {
 });
 
 describe('ExternalThreadMonitor', () => {
+  it('does not mark an old thread active on first sight', async () => {
+    const { ExternalThreadMonitor } = await import('./monitor.js');
+    const old = Math.floor(Date.now() / 1000) - 60;
+    const monitor = new ExternalThreadMonitor(
+      async () => [{ id: 'ext-old', updatedAt: old, path: null }],
+      { pollMs: 20, quietMs: 100 },
+    );
+    const events: SessionEvent[] = [];
+    monitor.watch('ext-old', (event) => events.push(event));
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(events).toEqual([]);
+    monitor.dispose();
+  });
+
   it('emits lifecycle events from updatedAt bumps', async () => {
     let records: { id: string; updatedAt: number | null; path: string | null }[] = [];
     const dir = mkdtempSync(join(tmpdir(), 'sdm-mon2-'));

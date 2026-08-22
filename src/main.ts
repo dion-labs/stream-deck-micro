@@ -20,6 +20,7 @@ import {
 import { DeckController } from './deck/controller.js';
 import { serveIpc } from './ipc.js';
 import { startAdminServer, type AdminServer } from './admin/server.js';
+import { macNotificationArgs } from './notifications.js';
 
 interface PersistedState {
   slots: {
@@ -92,13 +93,9 @@ async function attachMonitor(
 
 /** macOS notification with the outcome of a finished turn. */
 function notify(title: string, body: string): void {
-  const safe = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
   execFile(
     'osascript',
-    [
-      '-e',
-      `display notification ${safe(body.slice(0, 250))} with title ${safe(title.slice(0, 80))} sound name "Subtle"`,
-    ],
+    macNotificationArgs(title, body),
     (err) => {
       if (err) console.error(new Date().toISOString(), 'notification failed:', String(err));
     },
@@ -182,8 +179,13 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
   // to monitor-only bindings so they stay visible on the deck
   const persisted = loadState();
   if (persisted) {
+    const restoredSessionIds = new Set<string>();
     for (const slot of persisted.slots) {
       if (slot.index >= config.slots.count) continue;
+      if (restoredSessionIds.has(slot.sessionId)) {
+        log(`slot ${slot.index + 1}: skipped duplicate session ${slot.sessionId}`);
+        continue;
+      }
       try {
         await manager.resumeSession(slot.index, slot.sessionId, slot.cwd, slot.label);
       } catch (e) {
@@ -199,9 +201,11 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
           continue;
         }
       }
+      restoredSessionIds.add(slot.sessionId);
       if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
     }
     manager.select(Math.min(persisted.selectedIndex, config.slots.count - 1));
+    saveState(manager, config.slots.cwd);
   }
 
   // fill remaining slots with the newest external sessions (desktop/VS Code/TUI)
@@ -270,8 +274,13 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
         ? slotIndex
         : (manager.snapshots().find((s) => s.state === 'empty')?.index ?? -1);
     if (index < 0 || index >= config.slots.count) throw new Error('no free slot');
-    if (manager.snapshot(index).sessionId === record.id) {
-      throw new Error('already attached to that slot');
+    const existing = manager.snapshots().find((snapshot) => snapshot.sessionId === record.id);
+    if (existing) {
+      throw new Error(
+        existing.index === index
+          ? 'already attached to that slot'
+          : `already attached to slot ${existing.index + 1}`,
+      );
     }
     if (manager.snapshot(index).state !== 'empty') manager.clear(index);
     const mode = await bindThreadRecord(appServer, manager, index, record);
