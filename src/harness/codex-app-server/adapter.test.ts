@@ -213,6 +213,18 @@ describe('AppServerAdapter', () => {
     expect(sessions[1].name).toBe('fix the flaky login test ple…');
     expect(sessions[0].updatedAt).toBeTypeOf('string');
   });
+
+  it('listThreadRecords supplies the same preview fallback used by the session catalog', async () => {
+    const conn = new FakeConn();
+    conn.respond('thread/list', () => ({
+      data: [{ id: 'b', name: null, preview: 'https://map.thinkdog.it/ I am testing this' }],
+    }));
+    const adapter = adapterWith(conn);
+
+    const records = await adapter.listThreadRecords();
+
+    expect(records[0].name).toBe('https://map.thinkdog.it/ I a…');
+  });
 });
 
 describe('classifyRolloutTail', () => {

@@ -215,6 +215,10 @@ export async function runDaemon(
   // to monitor-only bindings so they stay visible on the deck
   const persisted = loadState();
   if (persisted) {
+    const currentRecords = appServer
+      ? await appServer.listThreadRecords().catch(() => [] as MonitoredThread[])
+      : [];
+    const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
     const restoredSessionIds = new Set<string>();
     for (const slot of persisted.slots) {
       if (slot.index >= config.slots.count) continue;
@@ -222,14 +226,17 @@ export async function runDaemon(
         log(`slot ${slot.index + 1}: skipped duplicate session ${slot.sessionId}`);
         continue;
       }
+      const currentRecord = currentRecordsById.get(slot.sessionId);
+      const currentLabel = currentRecord?.name ?? slot.label;
       try {
-        await manager.resumeSession(slot.index, slot.sessionId, slot.cwd, slot.label);
+        await manager.resumeSession(slot.index, slot.sessionId, slot.cwd, currentLabel ?? undefined);
       } catch (e) {
         if (appServer && e instanceof WriterHeldError) {
           await attachMonitor(appServer, manager, slot.index, {
+            ...currentRecord,
             id: slot.sessionId,
-            name: slot.label ?? null,
-            cwd: slot.cwd,
+            name: currentLabel ?? null,
+            cwd: currentRecord?.cwd ?? slot.cwd,
           });
           log(`slot ${slot.index + 1}: writer held elsewhere → monitor-only`);
         } else {

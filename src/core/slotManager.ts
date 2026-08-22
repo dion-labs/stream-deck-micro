@@ -175,6 +175,7 @@ export class SlotManager {
 
   private bind(index: number, session: AgentSession, cwd?: string): void {
     const slot = this.slots[index];
+    const previousSessionId = slot.session?.sessionId ?? null;
     if (session.sessionId) {
       try {
         this.assertSessionAvailable(index, session.sessionId);
@@ -184,6 +185,9 @@ export class SlotManager {
       }
     }
     this.detach(index);
+    if (previousSessionId !== null && previousSessionId !== session.sessionId) {
+      this.resetBindingMetadata(slot);
+    }
     slot.session = session;
     if (cwd) slot.cwd = cwd;
     slot.state = 'idle';
@@ -242,11 +246,20 @@ export class SlotManager {
 
   /** Clear a slot back to empty (unbind session). */
   clear(slotIndex: number): void {
-    this.slots[slotIndex].state = 'empty';
-    this.slots[slotIndex].label = `${slotIndex + 1}`;
-    this.slots[slotIndex].detail = '';
+    const slot = this.slots[slotIndex];
+    slot.state = 'empty';
+    this.resetBindingMetadata(slot);
     this.detach(slotIndex);
     this.emitSlot(slotIndex);
+  }
+
+  /** Remove metadata that belongs to the session binding, not the physical slot. */
+  private resetBindingMetadata(slot: Slot): void {
+    slot.label = `${slot.index + 1}`;
+    slot.customLabel = null;
+    slot.detail = '';
+    slot.lastMessage = null;
+    slot.updatedAt = Date.now();
   }
 
   private onSessionEvent(index: number, event: SessionEvent): void {

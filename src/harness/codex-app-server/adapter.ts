@@ -340,15 +340,12 @@ export class AppServerAdapter implements HarnessAdapter {
   }
 
   async listSessions(): Promise<SessionInfo[]> {
-    await this.ensureInit();
-    const resp = (await this.conn.request('thread/list', { limit: 50 })) as {
-      data?: ThreadRecord[];
-    };
-    return (resp.data ?? [])
+    const records = await this.listThreadRecords();
+    return records
       .filter((t) => !t.ephemeral)
       .map((t) => ({
         id: t.id,
-        name: t.name ?? (t.preview ? previewLabel(t.preview) : undefined),
+        name: t.name ?? undefined,
         updatedAt: t.updatedAt ? new Date(t.updatedAt * 1000).toISOString() : undefined,
       }));
   }
@@ -359,7 +356,10 @@ export class AppServerAdapter implements HarnessAdapter {
     const resp = (await this.conn.request('thread/list', { limit: 50 })) as {
       data?: ThreadRecord[];
     };
-    return resp.data ?? [];
+    return (resp.data ?? []).map((thread) => ({
+      ...thread,
+      name: thread.name ?? (thread.preview ? previewLabel(thread.preview) : null),
+    }));
   }
 
   async createSession(opts: CreateSessionOptions): Promise<AgentSession> {

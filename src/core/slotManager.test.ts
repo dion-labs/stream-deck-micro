@@ -176,9 +176,45 @@ describe('SlotManager', () => {
     const { adapter } = makeAdapter();
     const m = manager(adapter);
     await m.createSession();
+    m.rename(0, 'Old custom label');
     m.clear(0);
     expect(m.snapshot(0).state).toBe('empty');
+    expect(m.snapshot(0).label).toBe('1');
+    expect(m.snapshot(0).customLabel).toBeNull();
     expect(await m.createSession()).toBe(0);
+  });
+
+  it('drops binding-specific metadata when a different session replaces a slot', () => {
+    const { adapter } = makeAdapter();
+    const m = manager(adapter);
+    const first = new FakeSession('first');
+    first.name = 'First session';
+    const replacement = new FakeSession('replacement');
+    replacement.name = 'Replacement session';
+
+    m.attachSession(0, first);
+    m.rename(0, 'Old custom label');
+    first.emit({ type: 'agent-message', text: 'old session response' });
+    m.attachSession(0, replacement);
+
+    expect(m.snapshot(0)).toMatchObject({
+      sessionId: 'replacement',
+      label: 'Replacement session',
+      customLabel: null,
+      lastMessage: null,
+    });
+  });
+
+  it('keeps a custom label when reconnecting the same session', () => {
+    const { adapter } = makeAdapter();
+    const m = manager(adapter);
+    m.attachSession(0, new FakeSession('same'));
+    m.rename(0, 'Pinned label');
+
+    m.attachSession(0, new FakeSession('same'));
+
+    expect(m.snapshot(0).customLabel).toBe('Pinned label');
+    expect(m.snapshot(0).label).toBe('Pinned label');
   });
 
   it('resumeSession binds by id', async () => {
