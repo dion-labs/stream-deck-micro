@@ -11,10 +11,14 @@ export function renderSlotKey(
   selected: boolean,
   iconSize = 72,
   pulsePhase = 0,
+  attentionState?: 'done' | 'error',
 ): Buffer {
   const canvas = createCanvas(iconSize, iconSize);
   const ctx = canvas.getContext('2d');
-  const [r, g, b] = stateColor(snapshot.state, pulsePhase);
+  const base = stateColor(attentionState ?? snapshot.state, pulsePhase);
+  const [r, g, b] = attentionState && !pulsePhase
+    ? base.map((value) => Math.round(value * 0.58)) as [number, number, number]
+    : base;
   ctx.fillStyle = `rgb(${r},${g},${b})`;
   ctx.fillRect(0, 0, iconSize, iconSize);
 
@@ -22,8 +26,9 @@ export function renderSlotKey(
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.font = 'bold 11px sans-serif';
   ctx.textAlign = 'center';
-  const caption =
-    snapshot.state === 'empty'
+  const caption = attentionState
+    ? 'ATTENTION'
+    : snapshot.state === 'empty'
       ? 'empty'
       : snapshot.state === 'thinking'
         ? 'THINKING'

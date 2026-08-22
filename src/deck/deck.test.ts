@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeckController, type DeckDriver } from './controller.js';
 import type { AgentSlotSnapshot } from '../core/types.js';
 import { SLOT_KEYS, layoutActions, stateColor } from './layout.js';
@@ -9,6 +9,8 @@ class FakeDeck implements DeckDriver {
   MODEL = 'original-mk2';
   downs: number[] = [];
   fills = new Map<number, number>(); // keyIndex → fill count
+  brightness: number[] = [];
+  clearAllCount = 0;
   listeners = new Map<string, ((arg: unknown) => void)[]>();
 
   fillColor(keyIndex: number): void {
@@ -20,6 +22,15 @@ class FakeDeck implements DeckDriver {
   }
 
   clearKey(): void {}
+
+  clearAllKeys(): void {
+    this.clearAllCount += 1;
+    this.fills.clear();
+  }
+
+  setBrightness(percentage: number): void {
+    this.brightness.push(percentage);
+  }
 
   on(event: 'down' | 'up', listener: (keyIndex: number) => void): unknown;
   on(event: 'error', listener: (e: unknown) => void): unknown;
@@ -43,6 +54,16 @@ const workflows = [
   { id: 'debug', name: 'DEBUG' },
 ];
 
+const sleepSettings = {
+  brightness: 70,
+  autoSleep: { enabled: true, timeoutMinutes: 1 },
+  sleepKey: 'sleep' as const,
+};
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 function slot(index: number, state: AgentSlotSnapshot['state']): AgentSlotSnapshot {
   return {
     index,
@@ -58,15 +79,15 @@ function slot(index: number, state: AgentSlotSnapshot['state']): AgentSlotSnapsh
 }
 
 describe('layout', () => {
-  it('maps 15 keys: slots, stop/attach/select, do-it pinned, workflows fill the rest', () => {
+  it('maps 15 keys: slots, stop/attach/sleep, do-it pinned, workflows fill the rest', () => {
     const actions = layoutActions([{ id: 'do-it', name: 'DO IT' }, ...workflows]);
-    expect(actions.size).toBe(12); // 6 slots + stop/attach/select + do-it + 2 workflows
+    expect(actions.size).toBe(12); // 6 slots + stop/attach/sleep + do-it + 2 workflows
     expect(actions.get(0)).toEqual({ kind: 'slot', index: 0 });
     expect(actions.get(5)).toEqual({ kind: 'slot', index: 5 });
     expect(actions.get(6)).toEqual({ kind: 'workflow', id: 'do-it' });
     expect(actions.get(7)).toEqual({ kind: 'stop' });
     expect(actions.get(8)).toEqual({ kind: 'attach' });
-    expect(actions.get(14)).toEqual({ kind: 'select' });
+    expect(actions.get(14)).toEqual({ kind: 'sleep' });
     expect(actions.get(10)).toEqual({ kind: 'workflow', id: 'review-pr' });
     expect(actions.get(11)).toEqual({ kind: 'workflow', id: 'debug' });
   });
@@ -75,7 +96,7 @@ describe('layout', () => {
     const actions = layoutActions(workflows);
     expect(actions.get(6)).toBeUndefined();
     expect(actions.get(10)).toEqual({ kind: 'workflow', id: 'review-pr' });
-    expect(actions.get(14)).toEqual({ kind: 'select' });
+    expect(actions.get(14)).toEqual({ kind: 'sleep' });
   });
 
   it('state colors are distinct and pulse dims', () => {
@@ -109,7 +130,7 @@ describe('DeckController', () => {
     for (const key of SLOT_KEYS) expect(deck.fills.get(key)).toBeGreaterThan(0);
     expect(deck.fills.get(7)).toBeGreaterThan(0); // STOP
     expect(deck.fills.get(8)).toBeGreaterThan(0); // ATTACH
-    expect(deck.fills.get(14)).toBeGreaterThan(0); // SEL
+    expect(deck.fills.get(14)).toBeGreaterThan(0); // SLEEP
     expect(deck.fills.get(10)).toBeGreaterThan(0); // workflow 1
   });
 
@@ -129,7 +150,7 @@ describe('DeckController', () => {
       { kind: 'stop' },
       { kind: 'attach' },
       { kind: 'workflow', id: 'review-pr' },
-      { kind: 'select' },
+      { kind: 'sleep' },
     ]);
   });
 
@@ -140,5 +161,89 @@ describe('DeckController', () => {
     deck.fills.clear();
     c.updateSlot(slot(3, 'done'));
     expect([...deck.fills.keys()]).toEqual([3]);
+  });
+
+  it('manual sleep uses brightness zero and the first key press only wakes', () => {
+    vi.useFakeTimers();
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, 'idle')), 0);
+    const actions: unknown[] = [];
+    c.on('action', (action) => actions.push(action));
+
+    deck.press(14);
+    expect(actions).toEqual([{ kind: 'sleep' }]);
+    c.sleep();
+    expect(c.status().mode).toBe('asleep');
+    expect(deck.brightness.at(-1)).toBe(0);
+
+    deck.press(0);
+    expect(c.status().mode).toBe('awake');
+    expect(deck.brightness.at(-1)).toBe(70);
+    expect(actions).toEqual([{ kind: 'sleep' }]);
+
+    deck.press(0);
+    expect(actions.at(-1)).toEqual({ kind: 'slot', index: 0 });
+    c.close();
+  });
+
+  it('keeps a completed slot visible alone after the auto-sleep timeout', () => {
+    vi.useFakeTimers();
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, i === 2 ? 'running' : 'idle')), 0);
+    c.updateSlot(slot(2, 'done'));
+
+    expect(c.status().attention).toEqual([{ index: 2, state: 'done', sessionId: 's2' }]);
+    vi.advanceTimersByTime(60_000);
+
+    expect(c.status().mode).toBe('attention');
+    expect(deck.clearAllCount).toBeGreaterThan(0);
+    expect([...deck.fills.keys()]).toEqual([2]);
+    c.close();
+  });
+
+  it('acknowledges an attention slot and still performs its normal slot action', () => {
+    vi.useFakeTimers();
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, i === 1 ? 'running' : 'idle')), 0);
+    c.updateSlot(slot(1, 'done'));
+    vi.advanceTimersByTime(60_000);
+    const actions: unknown[] = [];
+    c.on('action', (action) => actions.push(action));
+
+    deck.press(1);
+
+    expect(c.status().mode).toBe('awake');
+    expect(c.status().attention).toEqual([]);
+    expect(actions).toEqual([{ kind: 'slot', index: 1 }]);
+    c.close();
+  });
+
+  it('treats a new turn as acknowledgement of the previous completion', () => {
+    vi.useFakeTimers();
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, i === 3 ? 'running' : 'idle')), 0);
+    c.updateSlot(slot(3, 'done'));
+    expect(c.status().attention).toHaveLength(1);
+
+    c.updateSlot(slot(3, 'thinking'));
+
+    expect(c.status().attention).toEqual([]);
+    c.close();
+  });
+
+  it('does not auto-sleep while a turn is active', () => {
+    vi.useFakeTimers();
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, i === 0 ? 'thinking' : 'idle')), 0);
+
+    vi.advanceTimersByTime(10 * 60_000);
+
+    expect(c.status().mode).toBe('awake');
+    c.close();
   });
 });

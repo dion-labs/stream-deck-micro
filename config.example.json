@@ -12,6 +12,14 @@
     "enabled": true,
     "port": 17531
   },
+  "deck": {
+    "brightness": 70,
+    "autoSleep": {
+      "enabled": true,
+      "timeoutMinutes": 15
+    },
+    "sleepKey": "sleep"
+  },
   "codex": {
     "sandboxMode": "danger-full-access",
     "approvalPolicy": "never"

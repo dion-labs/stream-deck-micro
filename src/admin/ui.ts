@@ -88,7 +88,14 @@ export const ADMIN_HTML: string = `<!doctype html>
   .cap.act.stop { background: #a12626; }
   .cap.act.attach { background: #8a5c14; }
   .cap.act.sel { background: #475569; }
+  .cap.act.sleep { background: #2d3748; }
   .cap.act.doit { background: #167046; }
+  .key.attention .cap { animation: attentionPulse 900ms ease-in-out infinite; }
+  .deck.mode-asleep .cap, .deck.mode-attention .key:not(.attention) .cap {
+    background: #030403 !important; color: transparent; animation: none !important;
+    box-shadow: inset 0 1px rgba(255,255,255,.015);
+  }
+  @keyframes attentionPulse { 0%,100% { filter: brightness(.58); } 50% { filter: brightness(1.15); } }
 
   @keyframes pulseThinking { 0%,100% { background: var(--purple-dim); } 50% { background: var(--purple); } }
   @keyframes pulseRunning { 0%,100% { background: var(--blue-dim); } 50% { background: var(--blue); } }
@@ -166,6 +173,23 @@ export const ADMIN_HTML: string = `<!doctype html>
   .wf .head .grow { flex: 1; }
   .wf .name-input { width: 130px; }
   .hint { color: var(--faint); font-size: 12px; margin: 4px 0 12px; }
+  .device-state { display: flex; align-items: center; gap: 12px; padding: 14px;
+                  border: 1px solid var(--line); border-radius: 13px; background: #0d0f0c; margin-bottom: 14px; }
+  .device-state .orb { width: 38px; height: 38px; border-radius: 12px; background: var(--accent);
+                      box-shadow: 0 0 22px rgba(200,255,99,.2); }
+  .device-state .orb.asleep { background: #30342e; box-shadow: none; }
+  .device-state .orb.attention { background: var(--green); box-shadow: 0 0 22px rgba(50,168,92,.3); }
+  .device-state strong { display:block; text-transform: capitalize; }
+  .device-state span { color: var(--faint); font-size: 11.5px; }
+  .settings-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .setting { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: #0d0f0c; }
+  .setting.wide { grid-column: 1 / -1; }
+  .setting label { display:block; color: var(--dim); font-size: 11px; text-transform: uppercase;
+                   letter-spacing: .08em; margin-bottom: 7px; }
+  .setting input[type=number], .setting select { width:100%; }
+  .setting input[type=range] { width:100%; accent-color: var(--accent); }
+  .checkline { display:flex; gap:9px; align-items:center; color:var(--text); }
+  .checkline input { accent-color: var(--accent); }
 
   .toast { position: fixed; bottom: 22px; right: 22px; display: flex; flex-direction: column;
            gap: 8px; z-index: 50; }
@@ -274,6 +298,7 @@ export const ADMIN_HTML: string = `<!doctype html>
   .cap.act.stop { background: linear-gradient(145deg, #a23737, #702424); }
   .cap.act.attach { background: linear-gradient(145deg, #956617, #6b470f); }
   .cap.act.sel { background: linear-gradient(145deg, #4f5e6d, #36414c); }
+  .cap.act.sleep { background: linear-gradient(145deg, #354054, #202735); }
 
   .legend { margin-top: 12px; padding: 0 4px; gap: 13px; font-size: 10px; align-items: center; }
   .legend .sw { width: 7px; height: 7px; border-radius: 50%; }
@@ -381,6 +406,7 @@ export const ADMIN_HTML: string = `<!doctype html>
       <button class="tab-btn" data-tab="sessions">Sessions</button>
       <button class="tab-btn" data-tab="workflows">Keys</button>
       <button class="tab-btn" data-tab="library">Library</button>
+      <button class="tab-btn" data-tab="device">Device</button>
     </div>
 
     <div class="tabpage on" id="tab-slots">
@@ -408,6 +434,37 @@ export const ADMIN_HTML: string = `<!doctype html>
       <div id="library"></div>
       <div class="actions" style="margin-top:10px">
         <button class="btn" id="libAdd">＋ add</button>
+      </div>
+    </div>
+
+    <div class="tabpage" id="tab-device">
+      <div id="deviceState"></div>
+      <div class="settings-grid">
+        <div class="setting wide">
+          <label for="deckBrightness">Awake brightness · <span id="brightnessValue">70%</span></label>
+          <input type="range" id="deckBrightness" min="10" max="100" step="5" value="70">
+        </div>
+        <div class="setting">
+          <label>Auto sleep</label>
+          <div class="checkline"><input type="checkbox" id="autoSleepEnabled"><span>Enabled</span></div>
+        </div>
+        <div class="setting">
+          <label for="sleepTimeout">Idle timeout (minutes)</label>
+          <input type="number" id="sleepTimeout" min="1" max="1440" value="15">
+        </div>
+        <div class="setting wide">
+          <label for="sleepKeyBehavior">Bottom-right key</label>
+          <select id="sleepKeyBehavior">
+            <option value="sleep">Sleep now</option>
+            <option value="toggle-auto">Toggle auto sleep</option>
+          </select>
+        </div>
+      </div>
+      <p class="hint" style="margin-top:12px">Status changes wake the deck and restart the timer. Active turns stay visible. Completed and failed slots remain visible until acknowledged.</p>
+      <div class="actions">
+        <button class="btn primary" id="deviceSave">Save settings</button>
+        <button class="btn" id="deviceWake">Wake now</button>
+        <button class="btn" id="deviceSleep">Sleep now</button>
       </div>
     </div>
   </div>
@@ -500,7 +557,10 @@ function twoLines(label) {
 function renderDeck(status) {
   var deck = $('deck');
   deck.innerHTML = '';
+  deck.className = 'deck mode-' + ((status.deck && status.deck.mode) || 'awake');
   var slots = status.slots;
+  var attention = {};
+  if (status.deck) status.deck.attention.forEach(function(a) { attention[a.index] = a.state; });
   var wfById = {};
   wfActive.forEach(function(w) { wfById[w.id] = w; });
 
@@ -509,9 +569,9 @@ function renderDeck(status) {
     return api('select', { index: i });
   }
 
-  slots.slice(0, 5).forEach(function(s, i) { deck.appendChild(mkSlotKey(s, i, function() { return slotClick(i); }).root); });
+  slots.slice(0, 5).forEach(function(s, i) { deck.appendChild(mkSlotKey(s, i, function() { return slotClick(i); }, attention[i]).root); });
   var s6 = slots[5];
-  var k6 = mkSlotKey(s6, 5, function() { return slotClick(5); });
+  var k6 = mkSlotKey(s6, 5, function() { return slotClick(5); }, attention[5]);
   deck.appendChild(k6.root);
 
   var doit = wfById['do-it'];
@@ -536,28 +596,32 @@ function renderDeck(status) {
     else cells.push(keyEl('<span class="sub">—</span>', 'wf', null, 'free workflow key').root);
   }
   cells.forEach(function(c) { deck.appendChild(c); });
-  // SEL is the last cell (bottom-right corner, key 14)
-  deck.appendChild(keyEl('<span class="t">SEL</span><span class="sub">cycle</span>',
-    'act sel', function() {
-      var occ = [];
-      lastStatus.slots.forEach(function(s) { if (s.state !== 'empty') occ.push(s.index); });
-      if (!occ.length) { toast('no sessions attached'); return null; }
-      var cur = lastStatus.selectedIndex;
-      var next = occ[(occ.indexOf(cur) + 1) % occ.length];
-      return api('select', { index: next });
-    }, 'cycle selection').root);
+  var deckInfo = status.deck || { mode:'awake', settings:{ sleepKey:'sleep', autoSleep:{enabled:true} } };
+  var toggleMode = deckInfo.settings.sleepKey === 'toggle-auto';
+  var sleepTitle = toggleMode ? 'AUTO' : 'SLEEP';
+  var sleepSub = toggleMode ? (deckInfo.settings.autoSleep.enabled ? 'on' : 'off') : 'now';
+  deck.appendChild(keyEl('<span class="t">' + sleepTitle + '</span><span class="sub">' + sleepSub + '</span>',
+    'act sleep', function() {
+      if (deckInfo.mode !== 'awake') return api('deck/wake', {});
+      if (!toggleMode) return api('deck/sleep', {});
+      var next = JSON.parse(JSON.stringify(deckInfo.settings));
+      next.autoSleep.enabled = !next.autoSleep.enabled;
+      return api('deck/settings/set', next, 'PUT').then(function() { toast('auto sleep ' + (next.autoSleep.enabled ? 'enabled' : 'disabled')); });
+    }, toggleMode ? 'toggle automatic sleep' : 'put the deck to sleep').root);
 }
 
-function mkSlotKey(s, i, onclick) {
+function mkSlotKey(s, i, onclick, attentionState) {
   var selected = lastStatus && lastStatus.selectedIndex === i;
   var pulse = s.state === 'thinking' ? ' pulse-thinking' : s.state === 'running' ? ' pulse-running' : '';
   var html = s.state === 'empty'
     ? '<span class="corner">' + (i+1) + '</span><span class="sub">empty</span>'
     : '<span class="corner">' + (i+1) + '</span>' + twoLines(s.label) +
-      '<span class="sub">' + CAPTIONS[s.state] + '</span>';
-  var el = keyEl(html, 'st-' + s.state + pulse, onclick,
+      '<span class="sub">' + (attentionState ? 'attention' : CAPTIONS[s.state]) + '</span>';
+  var visualState = attentionState || s.state;
+  var el = keyEl(html, 'st-' + visualState + pulse, onclick,
     s.state === 'empty' ? 'empty slot' : (s.label + ' — ' + s.state + (s.detail ? ' · ' + s.detail : '')));
   if (selected) el.root.classList.add('selected');
+  if (attentionState) el.root.classList.add('attention');
   return el;
 }
 
@@ -566,6 +630,52 @@ function pushFeed(line) {
   if (feedLines.length > 8) feedLines.pop();
   $('feed').innerHTML = feedLines.join('');
 }
+
+/* ---------- device tab ---------- */
+function renderDevice(status) {
+  if (!status.deck) return;
+  var d = status.deck;
+  var count = d.attention.length;
+  var detail = d.mode === 'asleep'
+    ? 'First physical key press wakes without running an action.'
+    : d.mode === 'attention'
+      ? count + ' slot' + (count === 1 ? '' : 's') + ' waiting for acknowledgement.'
+      : count
+        ? count + ' completion' + (count === 1 ? '' : 's') + ' waiting for acknowledgement.'
+        : d.autoSleepDueAt
+          ? 'Auto sleep is armed.'
+          : 'Ready and staying awake.';
+  $('deviceState').innerHTML = '<div class="device-state"><span class="orb ' + d.mode + '"></span><div><strong>' +
+    esc(d.mode) + '</strong><span>' + esc(detail) + '</span></div></div>';
+  $('deckBrightness').value = d.settings.brightness;
+  $('brightnessValue').textContent = d.settings.brightness + '%';
+  $('autoSleepEnabled').checked = d.settings.autoSleep.enabled;
+  $('sleepTimeout').value = d.settings.autoSleep.timeoutMinutes;
+  $('sleepKeyBehavior').value = d.settings.sleepKey;
+}
+
+$('deckBrightness').addEventListener('input', function() {
+  $('brightnessValue').textContent = $('deckBrightness').value + '%';
+});
+$('deviceSave').addEventListener('click', function() {
+  var settings = {
+    brightness: Number($('deckBrightness').value),
+    autoSleep: {
+      enabled: $('autoSleepEnabled').checked,
+      timeoutMinutes: Number($('sleepTimeout').value)
+    },
+    sleepKey: $('sleepKeyBehavior').value
+  };
+  api('deck/settings/set', settings, 'PUT')
+    .then(function() { toast('device settings saved'); refresh(); })
+    .catch(function(e) { toast(e.message, true); });
+});
+$('deviceWake').addEventListener('click', function() {
+  api('deck/wake', {}).then(function() { toast('deck awake'); refresh(); }).catch(function(e) { toast(e.message, true); });
+});
+$('deviceSleep').addEventListener('click', function() {
+  api('deck/sleep', {}).then(function() { toast('deck asleep'); refresh(); }).catch(function(e) { toast(e.message, true); });
+});
 
 /* ---------- slots tab ---------- */
 function renderInspector(status) {
@@ -774,7 +884,7 @@ function refresh() {
       prevStates[s.index] = s.state;
     });
     renderDeck(status);
-    if (!editing) { renderInspector(status); renderSlotList(status); renderSessions(); }
+    if (!editing) { renderInspector(status); renderSlotList(status); renderSessions(); renderDevice(status); }
   }).catch(function(e) {
     $('livedot').classList.remove('on');
     $('meta').textContent = 'daemon unreachable: ' + e.message;

@@ -20,6 +20,8 @@ usage:
   sdm new [cwd]              create a session in the first free slot
   sdm select <1-6>           select a slot
   sdm stop                   interrupt the selected slot
+  sdm sleep                  put the physical deck to sleep
+  sdm wake                   wake and repaint the physical deck
   sdm clear [1-6]            clear a slot (default: selected)
   sdm rename <1-6> <label|-> set or clear a custom slot label
   sdm workflow <id>          run a workflow on the selected slot
@@ -36,6 +38,11 @@ async function main(): Promise<void> {
           selectedIndex: number;
           slots: SlotView[];
           workflows: { id: string; name: string }[];
+          deck: {
+            mode: string;
+            attention: unknown[];
+            settings: { autoSleep: { enabled: boolean; timeoutMinutes: number } };
+          };
         }>(IPC_SOCKET, 'status');
         console.log(`selected: ${status.selectedIndex}`);
         for (const s of status.slots) {
@@ -45,6 +52,11 @@ async function main(): Promise<void> {
             `${marker} ${s.index + 1} [${s.state.padEnd(7)}] ${id} ${s.label}${s.detail ? ` — ${s.detail}` : ''}`,
           );
         }
+        const auto = status.deck.settings.autoSleep;
+        console.log(
+          `deck: ${status.deck.mode} · auto sleep ${auto.enabled ? `${auto.timeoutMinutes}m` : 'off'}`
+          + (status.deck.attention.length ? ` · ${status.deck.attention.length} attention` : ''),
+        );
         console.log(`workflows: ${status.workflows.map((w) => w.id).join(', ')}`);
         return;
       }
@@ -72,6 +84,14 @@ async function main(): Promise<void> {
       case 'stop':
         await ipcCall(IPC_SOCKET, 'stop');
         console.log('interrupt sent.');
+        return;
+      case 'sleep':
+        await ipcCall(IPC_SOCKET, 'deck.sleep');
+        console.log('deck asleep. press any physical key once to wake.');
+        return;
+      case 'wake':
+        await ipcCall(IPC_SOCKET, 'deck.wake');
+        console.log('deck awake.');
         return;
       case 'clear': {
         const { cleared } = await ipcCall<{ cleared: number }>(IPC_SOCKET, 'clear', {

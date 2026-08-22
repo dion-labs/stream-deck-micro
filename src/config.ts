@@ -37,6 +37,22 @@ const WorkflowSchema = z.object({
 });
 export { WorkflowSchema };
 
+export const DeckSettingsSchema = z.object({
+  /** Brightness used while the deck is awake (the device accepts 0–100). */
+  brightness: z.number().int().min(10).max(100).default(70),
+  autoSleep: z
+    .object({
+      enabled: z.boolean().default(true),
+      timeoutMinutes: z.number().int().min(1).max(1440).default(15),
+    })
+    .default({}),
+  /** What the bottom-right hardware key does while the deck is awake. */
+  sleepKey: z.enum(['sleep', 'toggle-auto']).default('sleep'),
+});
+
+export type DeckSettings = z.infer<typeof DeckSettingsSchema>;
+export const DEFAULT_DECK_SETTINGS: DeckSettings = DeckSettingsSchema.parse({});
+
 const AppServerUrlSchema = z.string().url().refine((value) => {
   const url = new URL(value);
   const loopback =
@@ -69,6 +85,7 @@ export const ConfigSchema = z.object({
       port: z.number().int().min(1).max(65535).default(17531),
     })
     .default({}),
+  deck: DeckSettingsSchema.default({}),
   codex: z
     .object({
       model: z.string().optional(),
@@ -126,6 +143,24 @@ export function saveWorkflows(
   }
   raw.workflows = workflows;
   raw.workflowsLibrary = workflowsLibrary;
+  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
+}
+
+/** Persist device settings while preserving every unrelated config key. */
+export function saveDeckSettings(
+  sourcePath: string | null,
+  settings: DeckSettings,
+): string {
+  const path = sourcePath ?? 'config.json';
+  let raw: Record<string, unknown> = {};
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  } catch {
+    // missing or unreadable file → start from defaults
+  }
+  raw.deck = settings;
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;

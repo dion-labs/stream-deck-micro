@@ -4,7 +4,7 @@ import type { AgentState } from '../core/types.js';
 export type KeyAction =
   | { kind: 'slot'; index: number }
   | { kind: 'stop' }
-  | { kind: 'select' }
+  | { kind: 'sleep' }
   | { kind: 'attach' }
   | { kind: 'workflow'; id: string };
 
@@ -17,14 +17,14 @@ export interface WorkflowKey {
  * 15-key (5×3) layout:
  *   row 0: slots 1–5
  *   row 1: slot 6, DO IT (the 'do-it' workflow), STOP, ATTACH, workflow #5
- *   row 2: workflows #1–4, SEL in the bottom-right corner
+ *   row 2: workflows #1–4, SLEEP in the bottom-right corner
  */
 export const SLOT_KEYS = [0, 1, 2, 3, 4, 5];
 export const KEY_DO_IT = 6;
 export const KEY_STOP = 7;
 export const KEY_ATTACH = 8;
 export const KEY_WF_EXTRA = 9;
-export const KEY_SELECT = 14;
+export const KEY_SLEEP = 14;
 
 /** Where each workflow lands: 'do-it' is pinned to its own action-style key. */
 export function workflowKeyAssignments(workflows: WorkflowKey[]): {
@@ -47,7 +47,7 @@ export function layoutActions(workflows: WorkflowKey[]): Map<number, KeyAction> 
   const map = new Map<number, KeyAction>();
   SLOT_KEYS.forEach((key, i) => map.set(key, { kind: 'slot', index: i }));
   map.set(KEY_STOP, { kind: 'stop' });
-  map.set(KEY_SELECT, { kind: 'select' });
+  map.set(KEY_SLEEP, { kind: 'sleep' });
   map.set(KEY_ATTACH, { kind: 'attach' });
   for (const { key, workflow } of workflowKeyAssignments(workflows)) {
     map.set(key, { kind: 'workflow', id: workflow.id });
@@ -75,9 +75,9 @@ export function stateColor(state: AgentState, pulsePhase = 0): [number, number, 
   }
 }
 
-export const ACTION_KEYS_STYLE: Record<'stop' | 'select' | 'attach', { title: string; color: [number, number, number] }> = {
+export const ACTION_KEYS_STYLE: Record<'stop' | 'sleep' | 'attach', { title: string; color: [number, number, number] }> = {
   stop: { title: 'STOP', color: [220, 38, 38] },
-  select: { title: 'SEL', color: [71, 85, 105] },
+  sleep: { title: 'SLEEP', color: [45, 55, 72] },
   attach: { title: 'ATCH', color: [180, 108, 20] },
 };
 

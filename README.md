@@ -1,7 +1,7 @@
 # Stream Deck Micro
 
 Turn an Elgato Stream Deck MK.2 into a local command center for Codex sessions.
-Six live slot keys show what your agents are doing; the remaining keys select,
+Six live slot keys show what your agents are doing; the remaining keys sleep,
 interrupt, attach, and launch reusable workflows. A localhost Control Room keeps
 the physical deck, Codex sessions, and workflow configuration in sync.
 
@@ -21,6 +21,7 @@ the physical deck, Codex sessions, and workflow configuration in sync.
 - Interrupts the selected turn and attaches recent sessions without leaving the deck.
 - Provides a local Control Room for session assignment, labels, and workflow editing.
 - Keeps session bindings and custom labels across daemon restarts.
+- Wakes for activity, holds completed work for acknowledgement, and sleeps when quiet.
 
 The project uses the
 [Codex App Server](https://developers.openai.com/codex/app-server) interface for
@@ -119,6 +120,25 @@ Shared mode adds this section:
 }
 ```
 
+Device sleep is configured in the same file or from the Control Room's
+**Device** tab:
+
+```json
+{
+  "deck": {
+    "brightness": 70,
+    "autoSleep": {
+      "enabled": true,
+      "timeoutMinutes": 15
+    },
+    "sleepKey": "sleep"
+  }
+}
+```
+
+Set `sleepKey` to `toggle-auto` if the bottom-right key should toggle automatic
+sleep instead of sleeping immediately.
+
 The example configuration uses `danger-full-access` with approvals set to
 `never`. That is intentional: v1 targets experienced Codex users running
 unattended local agents. A workflow key can therefore cause Codex to edit files,
@@ -133,7 +153,7 @@ every prompt and use a narrower sandbox if this does not match your threat model
 ├─────┼─────┼─────┼─────┼─────┤
 │ AG6 │DO IT│STOP │ ATCH │ WF  │
 ├─────┼─────┼─────┼─────┼─────┤
-│REVIEW│DEBUG│REFACTOR│TESTS│ SEL │
+│REVIEW│DEBUG│REFACTOR│TESTS│SLEEP│
 └─────┴─────┴─────┴─────┴─────┘
 ```
 
@@ -141,7 +161,7 @@ every prompt and use a narrower sandbox if this does not match your threat model
 - **DO IT** sends `lets do it` to the selected session.
 - **STOP** interrupts the selected turn.
 - **ATCH** attaches the newest unassigned Codex session.
-- **SEL** cycles the selected slot.
+- **SLEEP** puts the surface to sleep immediately. It can instead toggle auto sleep.
 - **Workflow keys** send their configured prompts to the selected slot.
 
 There is deliberately no NEW key in v1. Sessions begin where a real first prompt
@@ -158,6 +178,19 @@ onto the deck.
 | Working | Blue pulse | Codex is running tools or changing files |
 | Complete | Green flash | The latest turn completed |
 | Error | Red flash | The latest turn failed or stopped |
+| Attention | Green/red pulse | A finished turn has not been acknowledged |
+
+### Sleep and attention
+
+Automatic sleep counts from the latest slot status change. Thinking and working
+turns always keep the full deck awake. A completion or error becomes a persistent
+attention state; after the timeout, non-attention keys turn black and only those
+slots remain visible. Press an attention slot to acknowledge it and select that
+session. Starting a new turn in the session also acknowledges the previous result.
+
+When no slot needs attention, the timeout sets device brightness to zero. The
+first physical key press restores the deck and is deliberately consumed, so it
+cannot accidentally run a workflow. Any later status change also wakes the deck.
 
 ## Control Room
 
@@ -168,6 +201,8 @@ deck and lets you:
 - stop or remove a bound session;
 - search Codex sessions and attach one to a free slot;
 - edit, reorder, run, park, and reactivate workflow prompts;
+- configure brightness, auto-sleep timing, and the sleep-key behavior;
+- sleep or wake the physical deck immediately;
 - review recent state changes.
 
 Its API rejects unexpected hosts and origins and requires a fresh process-local
@@ -185,6 +220,8 @@ sdm send "fix the flaky authentication test"
 sdm new [cwd]
 sdm select 2
 sdm stop
+sdm sleep
+sdm wake
 sdm clear [1-6]
 sdm rename 2 "release prep"
 sdm workflow review
@@ -229,6 +266,9 @@ machine.
   removed. A Desktop version that does not support its WebSocket endpoint hook
   can still be observed through the polling fallback, but cannot share writes.
 - There is no approval, voice, reasoning-effort, or new-chat key in v1.
+- Codex App Server currently exposes no reliable Desktop “thread opened” event,
+  so merely viewing a task in Desktop cannot clear deck attention. Press its slot
+  key or begin the next turn to acknowledge it.
 - The legacy exec harness can leave descendant shell processes behind after an
   interrupt; the app-server harness uses graceful turn interruption.
 

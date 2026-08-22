@@ -5,7 +5,9 @@ import {
   APP_DIR,
   IPC_SOCKET,
   STATE_FILE,
+  DeckSettingsSchema,
   loadConfig,
+  saveDeckSettings,
   saveWorkflows,
   WorkflowSchema,
 } from './config.js';
@@ -17,7 +19,7 @@ import {
   WriterHeldError,
   type MonitoredThread,
 } from './harness/codex-app-server/adapter.js';
-import { DeckController } from './deck/controller.js';
+import { DeckController, type AttentionState } from './deck/controller.js';
 import { serveIpc } from './ipc.js';
 import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
@@ -31,9 +33,16 @@ interface PersistedState {
     customLabel?: string;
   }[];
   selectedIndex: number;
+  attention?: {
+    sessionId: string;
+    state: AttentionState;
+  }[];
 }
 
-function saveState(manager: SlotManager, defaultCwd: string): void {
+function saveState(manager: SlotManager, defaultCwd: string, deck: DeckController): void {
+  const attention = deck.status().attention
+    .filter((entry): entry is typeof entry & { sessionId: string } => Boolean(entry.sessionId))
+    .map(({ sessionId, state }) => ({ sessionId, state }));
   const state: PersistedState = {
     slots: manager
       .snapshots()
@@ -46,6 +55,7 @@ function saveState(manager: SlotManager, defaultCwd: string): void {
         customLabel: s.customLabel ?? undefined,
       })),
     selectedIndex: manager.selectedIndex,
+    attention,
   };
   mkdirSync(APP_DIR, { recursive: true, mode: 0o700 });
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2), { mode: 0o600 });
@@ -122,7 +132,10 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
     slotCount: config.slots.count,
     defaultCwd: config.slots.cwd,
   });
-  const deck = DeckController.open(config.workflows.map(({ id, name }) => ({ id, name })));
+  const deck = DeckController.open(
+    config.workflows.map(({ id, name }) => ({ id, name })),
+    config.deck,
+  );
 
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
@@ -146,12 +159,14 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
   manager.on('slot', (snapshot) => {
     deck.updateSlot(snapshot);
     maybeNotify(snapshot);
-    saveState(manager, config.slots.cwd);
+    saveState(manager, config.slots.cwd, deck);
   });
   manager.on('select', (index) => {
     deck.updateSelection(index);
-    saveState(manager, config.slots.cwd);
+    saveState(manager, config.slots.cwd, deck);
   });
+  deck.on('attention', () => saveState(manager, config.slots.cwd, deck));
+  deck.on('mode', (mode) => log(`deck mode → ${mode}`));
   deck.on('action', (action) => {
     switch (action.kind) {
       case 'slot':
@@ -161,8 +176,15 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
       case 'stop':
         manager.interrupt();
         break;
-      case 'select':
-        manager.selectNext();
+      case 'sleep':
+        if (config.deck.sleepKey === 'sleep') {
+          deck.sleep();
+        } else {
+          config.deck.autoSleep.enabled = !config.deck.autoSleep.enabled;
+          const path = saveDeckSettings(sourcePath, config.deck);
+          deck.setSettings(config.deck);
+          log(`auto sleep ${config.deck.autoSleep.enabled ? 'enabled' : 'disabled'} — saved to ${path}`);
+        }
         break;
       case 'attach':
         void attachNewest().catch((e) => log('attach failed:', String(e)));
@@ -206,7 +228,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
       if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
     }
     manager.select(Math.min(persisted.selectedIndex, config.slots.count - 1));
-    saveState(manager, config.slots.cwd);
+    saveState(manager, config.slots.cwd, deck);
   }
 
   // fill remaining slots with the newest external sessions (desktop/VS Code/TUI)
@@ -227,6 +249,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
   }
 
   deck.render(manager.snapshots(), manager.selectedIndex);
+  if (persisted?.attention?.length) deck.restoreAttention(persisted.attention);
   try {
     await serveIpc(IPC_SOCKET, (cmd, args) => handleIpc(cmd, args));
   } catch (e) {
@@ -296,6 +319,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
           harness: adapter.name,
           slots: manager.snapshots(),
           workflows: config.workflows,
+          deck: deck.status(),
         };
       case 'send': {
         const text = String(args.text ?? '');
@@ -316,6 +340,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
           throw new Error(`index must be 0..${config.slots.count - 1}`);
         }
         manager.select(index);
+        deck.acknowledge(index);
         return { selectedIndex: index };
       }
       case 'stop':
@@ -323,6 +348,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
         return { stopped: true };
       case 'clear': {
         const index = args.index === undefined ? manager.selectedIndex : Number(args.index);
+        deck.acknowledge(index, false);
         manager.clear(index);
         return { cleared: index };
       }
@@ -333,7 +359,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
         }
         if (manager.snapshot(index).state === 'empty') throw new Error('slot is empty');
         manager.rename(index, args.label === undefined || args.label === null ? null : String(args.label));
-        saveState(manager, config.slots.cwd);
+        saveState(manager, config.slots.cwd, deck);
         return { renamed: index };
       }
       case 'workflow': {
@@ -369,13 +395,29 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
         log(`workflows saved to ${path}`);
         return { saved: active.length, path };
       }
+      case 'deck.settings.get':
+        return deck.status();
+      case 'deck.settings.set': {
+        const settings = DeckSettingsSchema.parse(args);
+        const path = saveDeckSettings(sourcePath, settings);
+        config.deck = settings;
+        deck.setSettings(settings);
+        log(`deck settings saved to ${path}`);
+        return { ...deck.status(), path };
+      }
+      case 'deck.sleep':
+        deck.sleep();
+        return deck.status();
+      case 'deck.wake':
+        deck.wake();
+        return deck.status();
       default:
         throw new Error(`unknown cmd: ${cmd}`);
     }
   }
 
   const shutdown = () => {
-    saveState(manager, config.slots.cwd);
+    saveState(manager, config.slots.cwd, deck);
     deck.close();
     if (existsSync(IPC_SOCKET)) unlinkSync(IPC_SOCKET);
     void adminServer?.close();
