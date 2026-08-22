@@ -4,7 +4,7 @@ export const ADMIN_HTML: string = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>stream-deck-micro</title>
+<title>Control Room — Stream Deck Micro</title>
 <style>
   :root {
     --bg: #0a0a0f; --bg2: #101018; --panel: #14141d; --panel2: #1a1a26;
@@ -174,12 +174,176 @@ export const ADMIN_HTML: string = `<!doctype html>
            animation: slideIn .25s ease; }
   .toast .t.err { border-color: var(--err); }
   @keyframes slideIn { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+  /* ---------- Control Room v2 ---------- */
+  :root {
+    --bg: #070806; --bg2: #0b0d0a; --panel: #10120f; --panel2: #151814;
+    --line: #282c25; --line2: #3a4035;
+    --text: #f3f1e9; --dim: #a5a99d; --faint: #6d7367;
+    --accent: #c8ff63; --accent2: #e4ffae;
+    --ok: #65dc84; --err: #ff6666;
+    --purple: #9d72ff; --purple-dim: #553b94; --blue: #4f8cff; --blue-dim: #284d91;
+    --grey: #454b43; --empty: #1b1e1a; --green: #32a85c; --red: #c83e3e;
+    --radius: 20px;
+  }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 500px at 18% -12%, rgba(96, 122, 255, .18), transparent 62%),
+      radial-gradient(820px 440px at 92% 0%, rgba(200, 255, 99, .10), transparent 58%),
+      linear-gradient(180deg, #090a08 0%, var(--bg) 64%);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .16;
+    background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
+    background-size: 38px 38px; mask-image: linear-gradient(to bottom, #000, transparent 72%);
+  }
+  header {
+    max-width: 1320px; padding: 30px 30px 12px; gap: 16px; position: relative; z-index: 2;
+  }
+  .brand-lockup { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 13px;
+    background: #12160f; border: 1px solid #3c4435;
+    box-shadow: inset 0 1px rgba(255,255,255,.06), 0 12px 30px rgba(0,0,0,.35);
+  }
+  .logo::before { content: ''; position: absolute; inset: 10px; border: 1px solid rgba(200,255,99,.55); border-radius: 6px; }
+  .logo::after { inset: 15px 12px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--accent) 0 2px, transparent 2px 5px); }
+  .brand-copy { min-width: 0; }
+  header h1 { font-size: 15px; letter-spacing: -.1px; line-height: 1.15; }
+  .brand-copy p { margin: 4px 0 0; color: var(--faint); font-size: 11px; letter-spacing: .11em; text-transform: uppercase; }
+  header .meta {
+    margin-left: auto; padding: 9px 13px; border: 1px solid var(--line); border-radius: 999px;
+    background: rgba(15,17,14,.78); color: var(--dim); font-size: 11.5px;
+    box-shadow: inset 0 1px rgba(255,255,255,.025); backdrop-filter: blur(14px);
+  }
+  .livedot { background: #50564c; }
+  .livedot.on { background: var(--accent); box-shadow: 0 0 0 4px rgba(200,255,99,.08), 0 0 12px rgba(200,255,99,.55); }
+  .local-badge { color: #82887b; font: 10px/1.2 ui-monospace, "SFMono-Regular", monospace; letter-spacing: .07em; text-transform: uppercase; }
+
+  main {
+    max-width: 1320px; margin: 18px auto 0; padding: 0 30px 80px;
+    grid-template-columns: minmax(610px, 1.2fr) minmax(410px, .8fr); gap: 18px;
+  }
+  .card {
+    background: linear-gradient(145deg, rgba(18,21,17,.94), rgba(10,12,9,.97));
+    border: 1px solid var(--line); border-radius: 22px; padding: 20px;
+    box-shadow: 0 28px 80px rgba(0,0,0,.24), inset 0 1px rgba(255,255,255,.035);
+  }
+  .panel-head { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 18px; }
+  .panel-kicker { margin: 0 0 5px; color: var(--accent); font: 10px/1.2 ui-monospace, "SFMono-Regular", monospace; text-transform: uppercase; letter-spacing: .14em; }
+  .panel-head h2 { color: var(--text); margin: 0; font-size: 21px; text-transform: none; letter-spacing: -.45px; line-height: 1.1; font-weight: 620; }
+  .panel-head p:last-child { color: var(--dim); max-width: 380px; margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; }
+  .panel-code { margin-left: auto; color: var(--faint); font: 10px/1.2 ui-monospace, "SFMono-Regular", monospace; white-space: nowrap; padding-top: 3px; }
+  .deck-card { min-width: 0; }
+  .control-card { position: sticky; top: 16px; min-width: 0; }
+
+  .device-viewport { width: 100%; max-width: 100%; overflow-x: auto; scrollbar-width: thin; padding: 1px 1px 12px; }
+  .device-shell {
+    min-width: 560px; border-radius: 30px; padding: 34px 30px 36px;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,.07), transparent 22%),
+      linear-gradient(165deg, #30342d 0%, #20231f 48%, #121410 100%);
+    border: 1px solid #444a40;
+    box-shadow: 0 34px 70px -38px #000, inset 0 1px rgba(255,255,255,.1), inset 0 -1px #070807;
+  }
+  .device-shell::before { top: 13px; width: 66px; height: 5px; background: #090a08; box-shadow: inset 0 1px 2px #000, 0 1px rgba(255,255,255,.07); }
+  .device-shell::after { width: 146px; height: 12px; bottom: -10px; background: #181b17; border-color: #353a31; }
+  .deck { gap: 13px; margin-top: 4px; }
+  .key {
+    border-radius: 15px; padding: 5px; background: #070806;
+    box-shadow: inset 0 2px 7px rgba(0,0,0,.95), 0 1px rgba(255,255,255,.05);
+    transition: transform .11s ease, filter .15s ease;
+  }
+  .key:hover { transform: translateY(-2px); }
+  .key:active { transform: translateY(1px) scale(.96); }
+  .key.selected { background: var(--accent); box-shadow: 0 0 0 2px rgba(200,255,99,.18), 0 0 24px rgba(200,255,99,.16); }
+  .key.selected .cap { box-shadow: inset 0 0 0 1px rgba(255,255,255,.86); }
+  .cap {
+    inset: 5px; border-radius: 11px; padding: 7px 6px;
+    box-shadow: inset 0 1px rgba(255,255,255,.08), inset 0 -10px 24px rgba(0,0,0,.14);
+  }
+  .cap .t { font-size: 12px; letter-spacing: .015em; }
+  .cap .t.two { font-size: 10px; }
+  .cap .sub { margin-top: 4px; font-size: 8px; letter-spacing: .14em; opacity: .72; }
+  .cap .corner { top: 5px; left: 7px; font: 8px/1 ui-monospace, monospace; opacity: .75; }
+  .cap.wf { background: linear-gradient(145deg, #30395f, #222947); }
+  .cap.act.doit { background: linear-gradient(145deg, #1f714e, #145037); }
+  .cap.act.stop { background: linear-gradient(145deg, #a23737, #702424); }
+  .cap.act.attach { background: linear-gradient(145deg, #956617, #6b470f); }
+  .cap.act.sel { background: linear-gradient(145deg, #4f5e6d, #36414c); }
+
+  .legend { margin-top: 12px; padding: 0 4px; gap: 13px; font-size: 10px; align-items: center; }
+  .legend .sw { width: 7px; height: 7px; border-radius: 50%; }
+  .deck-note { margin-left: auto; color: var(--faint); }
+  .deck-note b { color: var(--dim); font-weight: 550; }
+  .activity { border-top: 1px solid var(--line); margin-top: 14px; padding-top: 13px; }
+  .activity-head { display: flex; justify-content: space-between; color: var(--faint); font: 9px/1.2 ui-monospace, monospace; letter-spacing: .13em; text-transform: uppercase; }
+  .feed { margin-top: 7px; padding-top: 0; border: 0; min-height: 44px; max-height: 92px; }
+  .feed:empty::before { content: 'State changes will appear here'; color: #53584f; font-family: inherit; }
+
+  .tabs { gap: 4px; margin-bottom: 18px; padding: 4px; border: 1px solid var(--line); border-radius: 13px; background: #0b0d0a; }
+  .tab-btn { padding: 9px 4px; border: 0; border-radius: 9px; font-size: 11.5px; }
+  .tab-btn.on { border: 0; color: #11140d; background: var(--accent); box-shadow: none; }
+  .inspector { padding: 16px; border-radius: 14px; background: #0d0f0c; }
+  .inspector .title { flex-wrap: wrap; }
+  .inspector .title h3 { font-size: 18px; letter-spacing: -.25px; }
+  .inspector .sid { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .inspector .msg { background: #090a08; border-color: #242820; color: #d5d8ce; line-height: 1.55; }
+  .actions { gap: 8px; }
+  button.btn { border-color: var(--line); background: #171a15; border-radius: 9px; padding: 7px 11px; }
+  button.btn:hover { border-color: #68735d; color: var(--accent2); background: #1c2019; }
+  button.btn.primary { color: #11140d; background: var(--accent); border-color: var(--accent); box-shadow: none; }
+  button.btn.primary:hover { color: #11140d; background: var(--accent2); }
+  button.btn.danger:hover { color: #ff9696; border-color: #8e3c3c; }
+  input[type=text], textarea, select { background: #090a08; border-color: var(--line); border-radius: 9px; }
+  input[type=text]:focus, textarea:focus { border-color: #7d9a4d; box-shadow: 0 0 0 3px rgba(200,255,99,.06); }
+  .slotlist .row, .sessions .row { padding: 11px 8px; border-color: #232620; }
+  .slotlist .row:hover, .sessions .row:hover { background: #151813; }
+  .badge { background: #22261f; color: var(--dim); }
+  .badge.key { background: #202944; color: #9ab5ff; }
+  .badge.pin { color: #16200e; background: #b8e96c; }
+  .wf { background: #0d0f0c; border-color: var(--line); border-radius: 13px; }
+  .toast .t { background: #181b16; border-color: #3a4034; }
+
+  @media (max-width: 1080px) {
+    main { grid-template-columns: 1fr; max-width: 760px; }
+    header { max-width: 760px; }
+    .control-card { position: static; }
+  }
+  @media (max-width: 620px) {
+    header { padding: 20px 16px 8px; align-items: flex-start; flex-wrap: wrap; }
+    .brand-lockup { width: 100%; }
+    header .meta { margin-left: 0; max-width: 100%; }
+    .local-badge { margin-left: auto; padding-top: 5px; }
+    main { margin-top: 10px; padding: 0 12px 50px; gap: 12px; }
+    .card { padding: 15px; border-radius: 18px; }
+    .panel-head { margin-bottom: 14px; }
+    .panel-head h2 { font-size: 18px; }
+    .panel-head p:last-child { display: none; }
+    .device-shell { min-width: 520px; padding: 31px 26px 32px; }
+    .deck { gap: 11px; }
+    .legend { gap: 9px; }
+    .deck-note { display: none; }
+    .tabs { overflow-x: auto; }
+    .tab-btn { min-width: 80px; }
+    .inspector .title h3 { font-size: 16px; }
+    .sessions { max-height: 340px; }
+  }
 </style>
 </head>
 <body>
 <header>
-  <div class="logo"></div>
-  <h1>stream-deck-micro</h1>
+  <div class="brand-lockup">
+    <div class="logo"></div>
+    <div class="brand-copy">
+      <h1>Stream Deck Micro</h1>
+      <p>Local agent command center</p>
+    </div>
+  </div>
+  <span class="local-badge">127.0.0.1 · local only</span>
   <div class="meta">
     <span class="livedot" id="livedot"></span>
     <span id="meta">connecting…</span>
@@ -187,10 +351,15 @@ export const ADMIN_HTML: string = `<!doctype html>
 </header>
 
 <main>
-  <div class="card">
-    <h2>Device — MK.2</h2>
-    <div class="device-shell">
-      <div class="deck" id="deck"></div>
+  <div class="card deck-card">
+    <div class="panel-head">
+      <div><p class="panel-kicker">Physical surface</p><h2>Your agents, at a glance.</h2><p>The virtual deck and the hardware share one command path. Click any key here to drive the same action.</p></div>
+      <span class="panel-code">MK.2 / 15 KEY</span>
+    </div>
+    <div class="device-viewport">
+      <div class="device-shell">
+        <div class="deck" id="deck"></div>
+      </div>
     </div>
     <div class="legend">
       <span><span class="sw" style="background:var(--grey)"></span>idle</span>
@@ -198,12 +367,15 @@ export const ADMIN_HTML: string = `<!doctype html>
       <span><span class="sw" style="background:var(--blue)"></span>working</span>
       <span><span class="sw" style="background:var(--green)"></span>done</span>
       <span><span class="sw" style="background:var(--red)"></span>error</span>
-      <span style="margin-left:auto"><b>click keys</b> — they drive the real deck</span>
+      <span class="deck-note"><b>Interactive</b> — clicks drive the real deck</span>
     </div>
-    <div class="feed" id="feed"></div>
+    <div class="activity"><div class="activity-head"><span>Live activity</span><span>Newest first</span></div><div class="feed" id="feed"></div></div>
   </div>
 
-  <div class="card">
+  <div class="card control-card">
+    <div class="panel-head">
+      <div><p class="panel-kicker">Control Room</p><h2>Shape the surface.</h2><p>Inspect sessions, assign slots, and tune the prompts behind every workflow key.</p></div>
+    </div>
     <div class="tabs">
       <button class="tab-btn on" data-tab="slots">Slots</button>
       <button class="tab-btn" data-tab="sessions">Sessions</button>
