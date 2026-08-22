@@ -23,6 +23,7 @@ const SERVER_PLIST = join(LAUNCH_AGENTS_DIR, `${SHARED_SERVER_LABEL}.plist`);
 const ENV_PLIST = join(LAUNCH_AGENTS_DIR, `${DESKTOP_ENV_LABEL}.plist`);
 const INSTALL_STATE = join(APP_DIR, 'shared-server.json');
 const DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
+const DESKTOP_APP = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
 
 interface SharedInstallState {
   url: string;
@@ -131,15 +132,36 @@ export async function sharedServerStatus(
 /** True while a running Desktop instance still owns its old private stdio server. */
 export function desktopUsesPrivateAppServer(): boolean {
   try {
-    const processes = execFileSync('/bin/ps', ['-ax', '-o', 'command='], {
+    const processes = execFileSync('/bin/ps', ['-ax', '-o', 'pid=,ppid=,command='], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
       timeout: 5000,
     });
-    return processes.includes(`${DESKTOP_CODEX} app-server --listen stdio://`);
+    return processListHasDesktopPrivateAppServer(processes);
   } catch {
     return false;
   }
+}
+
+/** Distinguish Desktop's private server from tool/CLI servers using the same bundled binary. */
+export function processListHasDesktopPrivateAppServer(processes: string): boolean {
+  const records = new Map<number, { ppid: number; command: string }>();
+  for (const line of processes.split('\n')) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
+    if (!match) continue;
+    records.set(Number(match[1]), { ppid: Number(match[2]), command: match[3] });
+  }
+  for (const record of records.values()) {
+    if (record.command !== `${DESKTOP_CODEX} app-server --listen stdio://`) continue;
+    let parent = records.get(record.ppid);
+    const visited = new Set<number>();
+    while (parent && !visited.has(parent.ppid)) {
+      if (parent.command === DESKTOP_APP) return true;
+      visited.add(parent.ppid);
+      parent = records.get(parent.ppid);
+    }
+  }
+  return false;
 }
 
 export function validateLoopbackEndpoint(value: string): string {

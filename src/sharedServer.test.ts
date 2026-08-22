@@ -3,7 +3,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConfigSchema, saveAppServerUrl } from './config.js';
-import { launchAgentPlist, validateLoopbackEndpoint } from './sharedServer.js';
+import {
+  launchAgentPlist,
+  processListHasDesktopPrivateAppServer,
+  validateLoopbackEndpoint,
+} from './sharedServer.js';
 
 const tempDirs: string[] = [];
 
@@ -62,5 +66,20 @@ describe('shared App Server setup', () => {
 
     expect(() => saveAppServerUrl(path, 'ws://127.0.0.1:17532')).toThrow('invalid config');
     expect(readFileSync(path, 'utf8')).toBe('{ not-json');
+  });
+
+  it('only treats a private stdio server owned by Desktop as restart evidence', () => {
+    const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const desktop = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
+    expect(processListHasDesktopPrivateAppServer([
+      `100 1 ${desktop}`,
+      '110 100 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl',
+      `120 110 ${codex} app-server --listen stdio://`,
+    ].join('\n'))).toBe(true);
+    expect(processListHasDesktopPrivateAppServer([
+      `200 1 ${codex} app-server --listen ws://127.0.0.1:17532`,
+      '210 200 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl',
+      `220 210 ${codex} app-server --listen stdio://`,
+    ].join('\n'))).toBe(false);
   });
 });
