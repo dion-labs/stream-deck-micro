@@ -1,6 +1,9 @@
 {
   "harness": "codex-app-server",
   "attachExternal": true,
+  "appServer": {
+    "url": "ws://127.0.0.1:17532"
+  },
   "slots": {
     "count": 6,
     "cwd": "."

@@ -18,8 +18,10 @@ export interface AppServerConn {
   close(): void;
 }
 
-export function spawnAppServerConn(): AppServerConn {
-  const conn = RpcConnection.spawn('codex', ['app-server']);
+export function spawnAppServerConn(endpoint?: string): AppServerConn {
+  const conn = endpoint
+    ? RpcConnection.webSocket(endpoint)
+    : RpcConnection.spawn('codex', ['app-server']);
   return {
     request: (m, p, t) => conn.request(m, p, t),
     onNotification: (cb) => {
@@ -292,18 +294,21 @@ interface ThreadRecord {
 export interface AppServerAdapterOptions {
   approvalPolicy?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
   sandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  endpoint?: string;
 }
 
 export class AppServerAdapter implements HarnessAdapter {
   readonly name = 'codex-app-server';
+  private readonly conn: AppServerConn;
   private readonly sessions = new Map<string, AppServerSession>();
   private readonly monitor: ExternalThreadMonitor;
   private initialized = false;
 
   constructor(
     private readonly options: AppServerAdapterOptions = {},
-    private readonly conn: AppServerConn = spawnAppServerConn(),
+    conn?: AppServerConn,
   ) {
+    this.conn = conn ?? spawnAppServerConn(options.endpoint);
     this.monitor = new ExternalThreadMonitor(async () => {
       try {
         await this.ensureInit();

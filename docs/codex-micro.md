@@ -37,7 +37,8 @@ The **Codex Micro** (kbd-1.0) is a limited-run macro keyboard co-developed by Op
 
 ## How we talk to Codex (instead of their proprietary bridge)
 
-- **Control plane**: `codex app-server` JSON-RPC protocol (same channel the Codex desktop app ecosystem uses). We use the official `@openai/codex-sdk` npm package, which spawns the CLI and speaks this protocol; raw protocol as fallback (full method/notification list in JOURNAL.md).
+- **Control plane**: one loopback WebSocket `codex app-server` shared by Codex Desktop and Stream Deck Micro. Both are independent JSON-RPC clients, while the single server process owns each thread.
 - **Sessions**: created headless via `thread/start`, persisted in `~/.codex/sessions`, resumable via `thread/resume` — so daemon restarts don't lose agent slots.
 - **State feed**: `thread/status/changed`, `turn/started`/`turn/completed`, `item/started`/`item/completed` notifications → mapped to our `AgentState` enum.
 - **Hooks**: Codex hooks/notify are outbound-only events; useful as supplementary signals for other harnesses, not as a control channel.
+- **Fallback**: if Desktop was not restarted into shared mode, externally owned threads remain visible through rollout polling and are re-acquired as soon as their writer is released.

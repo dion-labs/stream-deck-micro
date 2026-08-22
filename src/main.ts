@@ -109,6 +109,7 @@ export async function runDaemon(explicitConfigPath?: string): Promise<void> {
       ? new AppServerAdapter({
           approvalPolicy: config.codex.approvalPolicy,
           sandbox: config.codex.sandboxMode,
+          endpoint: config.appServer.url,
         })
       : new CodexAdapter({
           model: config.codex.model,

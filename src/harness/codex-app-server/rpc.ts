@@ -14,6 +14,15 @@ export interface RpcConnectionEvents {
   exit: (code: number | null) => void;
 }
 
+interface WebSocketLike {
+  readonly readyState: number;
+  send(data: string): void;
+  close(): void;
+  addEventListener(type: 'open' | 'message' | 'error' | 'close', listener: (event: any) => void): void;
+}
+
+export type WebSocketFactory = (url: string) => WebSocketLike;
+
 export class RpcConnection {
   private nextId = 1;
   private readonly pending = new Map<
@@ -21,9 +30,30 @@ export class RpcConnection {
     { resolve: (v: unknown) => void; reject: (e: Error) => void }
   >();
   private readonly emitter = new EventEmitter();
+  private sendPayload: ((payload: unknown) => void) | null = null;
+  private closeTransport: (() => void) | null = null;
   private closed = false;
 
-  private constructor(readonly child: ChildProcessWithoutNullStreams) {
+  private constructor() {}
+
+  static spawn(command: string, args: string[]): RpcConnection {
+    const connection = new RpcConnection();
+    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+    connection.bindChild(child);
+    return connection;
+  }
+
+  /** Connect to an App Server WebSocket. Requests made while connecting are queued. */
+  static webSocket(
+    url: string,
+    factory: WebSocketFactory = (endpoint) => new WebSocket(endpoint),
+  ): RpcConnection {
+    const connection = new RpcConnection();
+    connection.bindWebSocket(factory(url));
+    return connection;
+  }
+
+  private bindChild(child: ChildProcessWithoutNullStreams): void {
     const rl = createInterface({ input: child.stdout, crlfDelay: Infinity });
     rl.on('line', (line) => {
       if (!line.trim()) return;
@@ -36,20 +66,46 @@ export class RpcConnection {
       this.dispatch(msg);
     });
     child.on('exit', (code) => {
-      this.closed = true;
-      const err = new Error(`app-server exited (code ${code})`);
-      for (const { reject } of this.pending.values()) reject(err);
-      this.pending.clear();
+      this.fail(new Error(`app-server exited (code ${code})`));
       this.emitter.emit('exit', code);
     });
     child.stderr.on('data', () => {
       // diagnostics only; surfaced nowhere to keep key output clean
     });
+    this.sendPayload = (payload) => {
+      child.stdin.write(`${JSON.stringify(payload)}\n`);
+    };
+    this.closeTransport = () => child.kill();
   }
 
-  static spawn(command: string, args: string[]): RpcConnection {
-    const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-    return new RpcConnection(child);
+  private bindWebSocket(socket: WebSocketLike): void {
+    const queued: string[] = [];
+    this.sendPayload = (payload) => {
+      const encoded = JSON.stringify(payload);
+      if (socket.readyState === 1) socket.send(encoded);
+      else if (socket.readyState === 0) queued.push(encoded);
+      else this.fail(new Error('app-server WebSocket is closed'));
+    };
+    this.closeTransport = () => socket.close();
+    socket.addEventListener('open', () => {
+      for (const payload of queued.splice(0)) socket.send(payload);
+    });
+    socket.addEventListener('message', (event) => {
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      this.dispatch(msg);
+    });
+    socket.addEventListener('error', () => {
+      this.fail(new Error('app-server WebSocket failed'));
+    });
+    socket.addEventListener('close', () => {
+      this.fail(new Error('app-server WebSocket closed'));
+      this.emitter.emit('exit', null);
+    });
   }
 
   on<K extends keyof RpcConnectionEvents>(event: K, listener: RpcConnectionEvents[K]): void {
@@ -122,16 +178,20 @@ export class RpcConnection {
 
   private send(payload: unknown): void {
     if (this.closed) return;
-    this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+    this.sendPayload?.(payload);
+  }
+
+  private fail(error: Error): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const { reject } of this.pending.values()) reject(error);
+    this.pending.clear();
   }
 
   close(): void {
-    this.closed = true;
-    for (const { reject } of this.pending.values()) {
-      reject(new Error('connection closed'));
-    }
-    this.pending.clear();
-    this.child.kill();
+    if (this.closed) return;
+    this.fail(new Error('connection closed'));
+    this.closeTransport?.();
     this.emitter.removeAllListeners();
   }
 }

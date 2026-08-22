@@ -1,6 +1,6 @@
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 
 export const DEFAULT_WORKFLOWS = [
@@ -37,6 +37,15 @@ const WorkflowSchema = z.object({
 });
 export { WorkflowSchema };
 
+const AppServerUrlSchema = z.string().url().refine((value) => {
+  const url = new URL(value);
+  const loopback =
+    url.hostname === '127.0.0.1'
+    || url.hostname === 'localhost'
+    || url.hostname === '[::1]';
+  return url.protocol === 'ws:' && loopback && Boolean(url.port) && !url.username && !url.password;
+}, 'must use an unauthenticated loopback ws:// URL with an explicit port');
+
 export const ConfigSchema = z.object({
   harness: z.enum(['codex', 'codex-app-server']).default('codex'),
   slots: z
@@ -47,6 +56,12 @@ export const ConfigSchema = z.object({
     .default({}),
   /** app-server only: fill free slots with recent sessions (incl. desktop/VS Code ones). */
   attachExternal: z.boolean().default(true),
+  appServer: z
+    .object({
+      /** Connect to a shared App Server instead of spawning a private process. */
+      url: AppServerUrlSchema.optional(),
+    })
+    .default({}),
   /** Localhost web admin panel. */
   admin: z
     .object({
@@ -114,4 +129,36 @@ export function saveWorkflows(
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
   return path;
+}
+
+/** Set or clear the shared App Server endpoint while preserving the rest of the config. */
+export function saveAppServerUrl(explicitPath: string | undefined, url: string | null): string {
+  const path = explicitPath
+    ?? (existsSync('config.json') ? 'config.json' : join(APP_DIR, 'config.json'));
+  if (!url && !existsSync(path)) return path;
+  let raw: Record<string, unknown> = {};
+  if (existsSync(path)) {
+    try {
+      raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+    } catch (error) {
+      throw new Error(`cannot update invalid config at ${path}: ${String(error)}`);
+    }
+  }
+  if (url) {
+    raw.harness = 'codex-app-server';
+    raw.appServer = { ...(isRecord(raw.appServer) ? raw.appServer : {}), url };
+  } else if (isRecord(raw.appServer)) {
+    const appServer = { ...raw.appServer };
+    delete appServer.url;
+    if (Object.keys(appServer).length) raw.appServer = appServer;
+    else delete raw.appServer;
+  }
+  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
+  chmodSync(path, 0o600);
+  return path;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

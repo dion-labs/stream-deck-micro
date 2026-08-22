@@ -3,6 +3,7 @@ import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { platform, release } from 'node:os';
 import { listStreamDecks } from 'elgato-stream-deck';
 import { APP_DIR, IPC_SOCKET, loadConfig } from '../config.js';
+import { DESKTOP_ENDPOINT_ENV, desktopUsesPrivateAppServer } from '../sharedServer.js';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
 
@@ -67,6 +68,40 @@ export function collectDoctorChecks(explicitConfigPath?: string): DoctorCheck[] 
           : 'pass',
       detail: `${config.codex.sandboxMode} / approvals ${config.codex.approvalPolicy}`,
     });
+    if (config.appServer.url) {
+      const healthUrl = new URL(config.appServer.url);
+      healthUrl.protocol = healthUrl.protocol === 'wss:' ? 'https:' : 'http:';
+      healthUrl.pathname = '/healthz';
+      const healthy = commandOutput('/usr/bin/curl', [
+        '--fail',
+        '--silent',
+        '--show-error',
+        '--max-time',
+        '2',
+        healthUrl.toString(),
+      ]);
+      checks.push({
+        name: 'Shared App Server',
+        status: healthy !== null ? 'pass' : 'fail',
+        detail: healthy !== null ? config.appServer.url : `not reachable at ${config.appServer.url}`,
+      });
+      const desktopEndpoint = commandOutput('/bin/launchctl', ['getenv', DESKTOP_ENDPOINT_ENV]);
+      checks.push({
+        name: 'Codex Desktop routing',
+        status: desktopEndpoint === config.appServer.url ? 'pass' : 'fail',
+        detail: desktopEndpoint === config.appServer.url
+          ? desktopEndpoint
+          : `expected ${config.appServer.url}; reinstall shared mode`,
+      });
+      const restartRequired = desktopUsesPrivateAppServer();
+      checks.push({
+        name: 'Codex Desktop connection',
+        status: restartRequired ? 'fail' : 'pass',
+        detail: restartRequired
+          ? 'fully quit and reopen Codex Desktop to join the shared server'
+          : 'no private Desktop App Server detected',
+      });
+    }
   } catch (error) {
     checks.push({
       name: 'Configuration',

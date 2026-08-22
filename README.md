@@ -15,22 +15,30 @@ the physical deck, Codex sessions, and workflow configuration in sync.
 
 ## What it does
 
-- Monitors six recent Codex sessions from the desktop app, CLI, or IDE.
+- Shares six recent Codex sessions with the desktop app while it remains open.
 - Shows idle, thinking, working, complete, and error states on physical RGB keys.
 - Sends one-tap workflows such as Review, Debug, Refactor, and Tests.
 - Interrupts the selected turn and attaches recent sessions without leaving the deck.
 - Provides a local Control Room for session assignment, labels, and workflow editing.
 - Keeps session bindings and custom labels across daemon restarts.
 
-The project uses the official Codex app-server interface for rich-client events
-and conversation history. Sessions already owned by another Codex window are
-attached monitor-only until that writer releases them.
+The project uses the
+[Codex App Server](https://developers.openai.com/codex/app-server) interface for
+rich-client events and conversation history. Codex Desktop and Stream Deck
+Micro connect to one local WebSocket App Server, so both can read and control
+the same session without competing for its writer lock.
+
+```text
+Codex Desktop ─┐
+               ├── ws://127.0.0.1:17532 ── Codex sessions
+Stream Deck ───┘
+```
 
 ## Requirements
 
 - macOS
 - Node.js 22 or newer
-- An installed and authenticated Codex CLI
+- Codex Desktop, installed and authenticated
 - Elgato Stream Deck MK.2, 15-key model
 
 Quit the Elgato Stream Deck application before starting. It normally owns the
@@ -44,15 +52,43 @@ cd stream-deck-micro
 npm ci
 npm run build
 npm link
-stream-deck-micro doctor
-stream-deck-micro start
+stream-deck-micro shared install
 ```
 
 The npm package is not published yet. Until it is, install from source as shown
 above so every command in this guide works as written.
 
-The daemon prints the local Control Room URL when it starts. By default it is
-`http://127.0.0.1:17531`.
+After `shared install`, fully quit Codex Desktop with **Codex → Quit Codex** and
+open it again. Closing only the window is not enough. This one-time restart
+makes Desktop inherit the shared App Server endpoint.
+
+Then verify the complete setup and start the deck daemon:
+
+```bash
+stream-deck-micro doctor
+stream-deck-micro start
+```
+
+The installer:
+
+- starts a loopback-only Codex App Server at `ws://127.0.0.1:17532`;
+- keeps it running with a per-user macOS LaunchAgent;
+- points Codex Desktop and Stream Deck Micro at that endpoint;
+- updates the selected project configuration without discarding other settings.
+
+The deck daemon prints the local Control Room URL when it starts. By default it
+is `http://127.0.0.1:17531`.
+
+Check or completely remove the integration at any time:
+
+```bash
+stream-deck-micro shared status
+stream-deck-micro shared uninstall
+```
+
+After uninstalling, fully quit and reopen Codex Desktop. The uninstall command
+stops the shared server, removes both LaunchAgents, clears Desktop routing, and
+removes only the shared endpoint from the Stream Deck Micro configuration.
 
 ## Configure
 
@@ -67,8 +103,20 @@ cp config.example.json ~/.stream-deck-micro/config.json
 You can also pass an explicit config file:
 
 ```bash
+stream-deck-micro shared install ./my-deck.json
 stream-deck-micro doctor ./my-deck.json
 stream-deck-micro start ./my-deck.json
+```
+
+Shared mode adds this section:
+
+```json
+{
+  "harness": "codex-app-server",
+  "appServer": {
+    "url": "ws://127.0.0.1:17532"
+  }
+}
 ```
 
 The example configuration uses `danger-full-access` with approvals set to
@@ -125,6 +173,10 @@ deck and lets you:
 Its API rejects unexpected hosts and origins and requires a fresh process-local
 token embedded in the page. It is not designed for LAN or internet exposure.
 
+The shared Codex endpoint is also bound to loopback only. The installer rejects
+non-local or authenticated URLs rather than exposing control of Codex sessions
+to the network.
+
 ## Companion CLI
 
 ```bash
@@ -157,7 +209,7 @@ deck layout/rendering, and Control Room request security.
 src/
   core/                     harness-neutral sessions, slots, and state
   harness/codex/            Codex SDK execution adapter
-  harness/codex-app-server/ Codex app-server adapter and external monitor
+  harness/codex-app-server/ App Server transports, adapter, and fallback monitor
   deck/                     Stream Deck MK.2 layout, rendering, and HID control
   admin/                    localhost Control Room and API boundary
   cli/                      installer-facing commands and sdm companion CLI
@@ -173,8 +225,9 @@ machine.
 
 - v1 supports only the 15-key Stream Deck MK.2 on macOS.
 - The Elgato application must be closed while the daemon owns the device.
-- Monitor-only external sessions update at polling granularity and cannot be
-  prompted until their current Codex writer releases them.
+- Codex Desktop must be fully restarted after shared mode is installed or
+  removed. A Desktop version that does not support its WebSocket endpoint hook
+  can still be observed through the polling fallback, but cannot share writes.
 - There is no approval, voice, reasoning-effort, or new-chat key in v1.
 - The legacy exec harness can leave descendant shell processes behind after an
   interrupt; the app-server harness uses graceful turn interruption.

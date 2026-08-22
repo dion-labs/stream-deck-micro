@@ -5,6 +5,9 @@ const HELP = `stream-deck-micro — a local Codex command center for Stream Deck
 
 usage:
   stream-deck-micro doctor [config] [--json]  verify the machine and configuration
+  stream-deck-micro shared install [config]   install the shared Codex App Server
+  stream-deck-micro shared status             inspect shared-server health and Desktop routing
+  stream-deck-micro shared uninstall [config] remove shared mode and restore private sessions
   stream-deck-micro start [config]            start the daemon and Control Room
   stream-deck-micro help                      show this help
 
@@ -25,6 +28,31 @@ async function main(): Promise<void> {
   if (command === 'start') {
     const { runDaemon } = await import('../main.js');
     await runDaemon(args[0]);
+    return;
+  }
+  if (command === 'shared') {
+    const { installSharedServer, sharedServerStatus, uninstallSharedServer } = await import(
+      '../sharedServer.js'
+    );
+    const [action = 'status', ...sharedArgs] = args;
+    const urlIndex = sharedArgs.indexOf('--url');
+    if (urlIndex >= 0 && !sharedArgs[urlIndex + 1]) throw new Error('--url requires a value');
+    const url = urlIndex >= 0 ? sharedArgs[urlIndex + 1] : undefined;
+    const configPath = sharedArgs.find((arg, index) => arg !== '--url' && index !== urlIndex + 1);
+    const status = action === 'install'
+      ? await installSharedServer(configPath, url)
+      : action === 'uninstall'
+        ? await uninstallSharedServer(configPath)
+        : action === 'status'
+          ? await sharedServerStatus()
+          : null;
+    if (!status) throw new Error(`unknown shared action: ${action}`);
+    process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
+    if (action === 'install') {
+      process.stdout.write('\nShared mode installed. Fully quit and reopen Codex Desktop once.\n');
+    } else if (action === 'uninstall') {
+      process.stdout.write('\nShared mode removed. Fully quit and reopen Codex Desktop once.\n');
+    }
     return;
   }
   if (command === 'help' || command === '--help' || command === '-h') {

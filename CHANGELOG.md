@@ -10,3 +10,7 @@ Versioning once it reaches 1.0.
 - Attach recent sessions from Codex desktop, CLI, and IDE clients.
 - Run configurable one-tap workflows and interrupt active turns.
 - Provide `stream-deck-micro`, `sdm`, and diagnostics commands.
+- Share one loopback WebSocket App Server with Codex Desktop so both clients can
+  control the same session concurrently.
+- Install, inspect, and remove the shared server through reversible LaunchAgent
+  lifecycle commands.
