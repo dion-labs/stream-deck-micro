@@ -5,13 +5,14 @@ import {
   type PropertyInspectorDidAppearEvent,
   type SendToPluginEvent,
   SingletonAction,
+  Target,
   type WillAppearEvent,
   type WillDisappearEvent,
 } from '@elgato/streamdeck';
 import streamDeck from '@elgato/streamdeck';
 import type { JsonObject, JsonValue } from '@elgato/utils';
 import { BridgeClient } from './bridge.js';
-import { renderKey } from './render.js';
+import { renderKey, svgDataUrl } from './render.js';
 import type { DaemonStatus } from './types.js';
 
 const POLL_MS = 650;
@@ -107,14 +108,17 @@ export class SurfaceKeyAction extends SingletonAction {
   private async renderAction(visible: KeyAction): Promise<void> {
     const coordinates = visible.coordinates;
     if (!coordinates || visible.device.size.columns !== 5) {
-      await visible.setImage(renderKey(null, -1, this.pulse, 'A 5×3 Stream Deck is required'));
+      await visible.setImage(
+        svgDataUrl(renderKey(null, -1, this.pulse, 'A 5×3 Stream Deck is required')),
+        { target: Target.HardwareAndSoftware },
+      );
       return;
     }
     const index = coordinates.row * 5 + coordinates.column;
-    const image = renderKey(this.status, index, this.pulse, this.error);
+    const image = svgDataUrl(renderKey(this.status, index, this.pulse, this.error));
     if (this.images.get(visible.id) === image) return;
     this.images.set(visible.id, image);
-    await visible.setImage(image);
+    await visible.setImage(image, { target: Target.HardwareAndSoftware });
   }
 
   private inspectorState(): Record<string, JsonValue> {

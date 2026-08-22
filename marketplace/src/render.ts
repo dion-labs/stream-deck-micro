@@ -39,6 +39,11 @@ export function renderKey(
   return renderAction(status, mapping, pulse, error);
 }
 
+/** Stream Deck expects generated SVG feedback as an encoded image data URL. */
+export function svgDataUrl(svg: string): string {
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 function renderAction(
   status: DaemonStatus,
   action: SurfaceAction,

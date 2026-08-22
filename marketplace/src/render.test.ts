@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderKey } from './render.js';
+import { renderKey, svgDataUrl } from './render.js';
 import type { DaemonStatus } from './types.js';
 
 const status: DaemonStatus = {
@@ -29,6 +29,13 @@ const status: DaemonStatus = {
 };
 
 describe('Marketplace key rendering', () => {
+  it('encodes generated SVG in the format accepted by setImage', () => {
+    const svg = renderKey(status, 0, true);
+    const image = svgDataUrl(svg);
+    expect(image).toMatch(/^data:image\/svg\+xml,%3Csvg/);
+    expect(decodeURIComponent(image.slice('data:image/svg+xml,'.length))).toBe(svg);
+  });
+
   it('shows actionable setup feedback only on the center key when offline', () => {
     expect(renderKey(null, 7, false)).toContain('BRIDGE');
     expect(renderKey(null, 0, false)).not.toContain('BRIDGE');

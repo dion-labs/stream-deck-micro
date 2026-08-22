@@ -520,7 +520,7 @@ var wfLibrary = [];
 var prevStates = {};
 var feedLines = [];
 var controlMode = 'configure';
-var selectedKeyIndex = 0;
+var selectedKeyIndex = null;
 var layoutDraft = [];
 var layoutDirty = false;
 var draggingKeyIndex = null;
@@ -601,6 +601,12 @@ function renderDeck(status) {
     layoutDraft = ((status.deck && status.deck.layout) || []).map(function(entry) {
       return { keyIndex: entry.keyIndex, action: JSON.parse(JSON.stringify(entry.action)) };
     });
+    if (selectedKeyIndex === null) {
+      var selectedSlotEntry = layoutDraft.find(function(entry) {
+        return entry.action.kind === 'slot' && entry.action.index === status.selectedIndex;
+      });
+      if (selectedSlotEntry) selectedKeyIndex = selectedSlotEntry.keyIndex;
+    }
   }
   var byKey = {};
   layoutDraft.forEach(function(entry) { byKey[entry.keyIndex] = entry.action; });
@@ -643,6 +649,7 @@ function wireDeckKey(root, keyIndex, action, status) {
     if (controlMode === 'configure') {
       selectedKeyIndex = keyIndex;
       renderDeck(status);
+      renderSessions();
       return;
     }
     Promise.resolve(executeAction(action, status)).then(refresh).catch(function(e) { toast(e.message, true); });
@@ -750,6 +757,10 @@ function actionLabel(action) {
 function renderKeyInspector() {
   var host = $('keyInspector');
   if (controlMode !== 'configure') { host.innerHTML = ''; return; }
+  if (selectedKeyIndex === null) {
+    host.innerHTML = '<div class="key-inspector"><div class="eyebrow">Layout editor</div><div class="key-title"><strong>Select a key to inspect it</strong></div></div>';
+    return;
+  }
   var entry = layoutDraft.find(function(candidate) { return candidate.keyIndex === selectedKeyIndex; });
   var action = entry && entry.action;
   var options = [{ value:'', label:'Empty key' }];
@@ -933,8 +944,14 @@ function renderSessions() {
   });
   var el = $('sessions');
   el.innerHTML = '';
-  var free = lastStatus && lastStatus.slots.some(function(s) { return s.state === 'empty'; });
-  $('attachHint').textContent = free ? '' : 'all slots busy — remove one from the Slots tab first';
+  var targetIndex = attachTargetIndex();
+  var targetSlot = lastStatus && lastStatus.slots[targetIndex];
+  var replacing = targetSlot && targetSlot.state !== 'empty';
+  $('attachHint').textContent = targetSlot
+    ? (replacing
+      ? 'Target: slot ' + (targetIndex + 1) + ' · attaching replaces “' + targetSlot.label + '” without deleting that Codex session.'
+      : 'Target: empty slot ' + (targetIndex + 1) + '.')
+    : '';
   var attached = {};
   if (lastStatus) lastStatus.slots.forEach(function(s) { if (s.sessionId) attached[s.sessionId] = s.index; });
   rows.forEach(function(s) {
@@ -944,17 +961,24 @@ function renderSessions() {
     row.innerHTML = '<div class="name">' + esc(s.name || s.id.slice(0, 10)) + '</div>' +
       '<span class="when">' + (s.updatedAt || '').replace('T',' ').slice(0, 16) + '</span>' + badge;
     if (attached[s.id] === undefined) {
-      var btn = mkBtn('Attach', 'btn mini', function() {
-        return api('attach', { id: s.id }).then(function(r) {
+      var btn = mkBtn(replacing ? 'Replace' : 'Attach', 'btn mini', function() {
+        return api('attach', { id: s.id, slotIndex: targetIndex }).then(function(r) {
           toast('attached → slot ' + (r.index+1) + ' (' + r.mode + ')');
         });
       });
-      btn.disabled = !free;
       row.appendChild(btn);
     }
     el.appendChild(row);
   });
   if (!rows.length) el.innerHTML = '<div class="hint">no sessions match</div>';
+}
+
+function attachTargetIndex() {
+  if (lastStatus && controlMode === 'configure' && selectedKeyIndex !== null) {
+    var selectedEntry = layoutDraft.find(function(entry) { return entry.keyIndex === selectedKeyIndex; });
+    if (selectedEntry && selectedEntry.action.kind === 'slot') return selectedEntry.action.index;
+  }
+  return lastStatus ? lastStatus.selectedIndex : 0;
 }
 
 /* ---------- workflows & library ---------- */

@@ -258,7 +258,7 @@ deck and lets you:
 - opt into **Live control** when the browser deck should execute exactly like the hardware;
 - inspect and rename slots;
 - stop or remove a bound session;
-- search Codex sessions and attach one to a free slot;
+- search Codex sessions and attach one to the targeted slot, replacing its binding without deleting the underlying Codex task;
 - edit, explicitly run, park, and reactivate workflow prompts;
 - configure brightness, auto-sleep timing, and the sleep-key behavior;
 - sleep or wake the physical deck immediately;
