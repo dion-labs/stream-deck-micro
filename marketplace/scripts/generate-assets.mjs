@@ -4,6 +4,7 @@ import {
   mkdirSync,
   mkdtempSync,
   rmSync,
+  utimesSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -99,9 +100,13 @@ const staging = mkdtempSync(join(tmpdir(), 'stream-deck-micro-profile.'));
 const profileName = '7B0B36F4-0FA9-4D2B-A64A-D1A2BF7D143B.sdProfile';
 const profileDir = join(staging, profileName);
 mkdirSync(profileDir, { recursive: true });
-writeFileSync(join(profileDir, 'manifest.json'), `${JSON.stringify(profile, null, 2)}\n`);
+const profileManifest = join(profileDir, 'manifest.json');
+writeFileSync(profileManifest, `${JSON.stringify(profile, null, 2)}\n`);
+const fixedTimestamp = new Date('2024-01-01T00:00:00.000Z');
+utimesSync(profileManifest, fixedTimestamp, fixedTimestamp);
+utimesSync(profileDir, fixedTimestamp, fixedTimestamp);
 const output = join(pluginRoot, 'profiles', 'Stream Deck Micro.streamDeckProfile');
 mkdirSync(dirname(output), { recursive: true });
 rmSync(output, { force: true });
-execFileSync('/usr/bin/zip', ['-q', '-r', output, profileName], { cwd: staging });
+execFileSync('/usr/bin/zip', ['-X', '-q', '-r', output, profileName], { cwd: staging });
 rmSync(staging, { recursive: true, force: true });
