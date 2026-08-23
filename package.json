@@ -52,6 +52,7 @@
     "marketplace:build": "npm --prefix marketplace run build",
     "marketplace:validate": "npm --prefix marketplace run validate",
     "marketplace:pack": "npm --prefix marketplace run pack",
+    "marketplace:media": "node scripts/generate-marketplace-media.mjs",
     "prepack": "npm run build"
   },
   "dependencies": {

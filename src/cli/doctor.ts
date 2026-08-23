@@ -3,7 +3,7 @@ import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { platform, release } from 'node:os';
 import { listStreamDecks } from 'elgato-stream-deck';
 import { APP_DIR, IPC_SOCKET, loadConfig, type SurfaceMode } from '../config.js';
-import { DESKTOP_ENDPOINT_ENV, desktopUsesPrivateAppServer } from '../sharedServer.js';
+import { DESKTOP_ENDPOINT_ENV, desktopConnectionStatus } from '../sharedServer.js';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
 
@@ -98,13 +98,15 @@ export function collectDoctorChecks(
           ? desktopEndpoint
           : `expected ${config.appServer.url}; reinstall shared mode`,
       });
-      const restartRequired = desktopUsesPrivateAppServer();
+      const desktopConnection = desktopConnectionStatus(config.appServer.url);
       checks.push({
         name: 'Codex Desktop connection',
-        status: restartRequired ? 'fail' : 'pass',
-        detail: restartRequired
-          ? 'fully quit and reopen Codex Desktop to join the shared server'
-          : 'no private Desktop App Server detected',
+        status: desktopConnection.state === 'connected'
+          ? 'pass'
+          : desktopConnection.state === 'restart-required'
+            ? 'fail'
+            : 'warn',
+        detail: desktopConnection.message,
       });
     }
   } catch (error) {

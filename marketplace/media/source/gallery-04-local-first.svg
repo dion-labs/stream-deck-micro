@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+    
+    <defs>
+      <radialGradient id="bgGlow" cx="82%" cy="10%" r="90%">
+        <stop offset="0" stop-color="#18200f"/>
+        <stop offset=".44" stop-color="#0b0e09"/>
+        <stop offset="1" stop-color="#070907"/>
+      </radialGradient>
+      <linearGradient id="deckBody" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#30352f"/>
+        <stop offset=".55" stop-color="#161a16"/>
+        <stop offset="1" stop-color="#0b0d0b"/>
+      </linearGradient>
+      <linearGradient id="keyFace" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#20251f"/>
+        <stop offset="1" stop-color="#0b0e0b"/>
+      </linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+        <feDropShadow dx="0" dy="26" stdDeviation="24" flood-color="#000" flood-opacity=".65"/>
+      </filter>
+      <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="12"/>
+      </filter>
+      <pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse">
+        <path d="M70 0H0V70" fill="none" stroke="#fff" stroke-opacity=".027" stroke-width="2"/>
+      </pattern>
+      <style>
+        .sans { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; }
+        .mono { font-family: 'SFMono-Regular', Menlo, Monaco, monospace; }
+      </style>
+    </defs>
+    <rect width="1920" height="960" fill="url(#bgGlow)"/><rect width="1920" height="960" fill="url(#grid)"/>
+    
+    <circle cx="105" cy="86" r="5" fill="#c9ff4a"/>
+    <text x="125" y="90" class="mono" fill="#8d9788" font-size="16" font-weight="600" letter-spacing="3">04 / LOCAL-FIRST ARCHITECTURE</text>
+    <text x="100" y="180" class="sans" fill="#f1f3ed" font-size="72" font-weight="650" letter-spacing="-3">Three local parts.</text>
+    <text x="100" y="256" class="sans" fill="#c9ff4a" font-size="72" font-weight="650" letter-spacing="-3">No Dion Labs cloud.</text>
+    <text x="1070" y="173" class="sans" fill="#8d9788" font-size="21">Your prompts and session contents stay between</text>
+    <text x="1070" y="207" class="sans" fill="#8d9788" font-size="21">the software already running on your Mac.</text>
+    <g transform="translate(100 405)">
+    <rect width="430" height="250" rx="22" fill="#0d110d" stroke="#a78bfa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="28" y="28" width="50" height="50" rx="11" fill="#a78bfa" fill-opacity=".13" stroke="#a78bfa" stroke-opacity=".48"/>
+    <text x="53" y="59" class="mono" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="700">01</text>
+    <text x="28" y="134" class="sans" fill="#f1f3ed" font-size="28" font-weight="650">Codex Desktop</text>
+    <text x="28" y="176" class="sans" fill="#8d9788" font-size="17">Keeps session ownership</text>
+    <text x="28" y="205" class="sans" fill="#8d9788" font-size="17">and the full conversation</text>
+  </g>
+    <g transform="translate(745 405)">
+    <rect width="430" height="250" rx="22" fill="#0d110d" stroke="#c9ff4a" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="28" y="28" width="50" height="50" rx="11" fill="#c9ff4a" fill-opacity=".13" stroke="#c9ff4a" stroke-opacity=".48"/>
+    <text x="53" y="59" class="mono" text-anchor="middle" fill="#c9ff4a" font-size="13" font-weight="700">02</text>
+    <text x="28" y="134" class="sans" fill="#f1f3ed" font-size="28" font-weight="650">Local bridge</text>
+    <text x="28" y="176" class="sans" fill="#8d9788" font-size="17">Coordinates shared state</text>
+    <text x="28" y="205" class="sans" fill="#8d9788" font-size="17">through localhost only</text>
+  </g>
+    <g transform="translate(1390 405)">
+    <rect width="430" height="250" rx="22" fill="#0d110d" stroke="#5eead4" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="28" y="28" width="50" height="50" rx="11" fill="#5eead4" fill-opacity=".13" stroke="#5eead4" stroke-opacity=".48"/>
+    <text x="53" y="59" class="mono" text-anchor="middle" fill="#5eead4" font-size="13" font-weight="700">03</text>
+    <text x="28" y="134" class="sans" fill="#f1f3ed" font-size="28" font-weight="650">Stream Deck</text>
+    <text x="28" y="176" class="sans" fill="#8d9788" font-size="17">Shows live status and</text>
+    <text x="28" y="205" class="sans" fill="#8d9788" font-size="17">sends your chosen actions</text>
+  </g>
+    <path d="M530 530H720" stroke="#c9ff4a" stroke-opacity=".5" stroke-width="3" stroke-dasharray="9 10"/>
+    <path d="m704 519 16 11-16 11" fill="none" stroke="#c9ff4a" stroke-width="3"/>
+    <path d="M1175 530h190" stroke="#c9ff4a" stroke-opacity=".5" stroke-width="3" stroke-dasharray="9 10"/>
+    <path d="m1349 519 16 11-16 11" fill="none" stroke="#c9ff4a" stroke-width="3"/>
+    <g transform="translate(100 785)">
+      <rect width="1720" height="74" rx="12" fill="#0f140d" stroke="#c9ff4a" stroke-opacity=".18"/>
+      <circle cx="36" cy="37" r="7" fill="#4ade80"/>
+      <text x="61" y="43" class="mono" fill="#c1cfb9" font-size="14" letter-spacing="1.6">NO DION LABS ACCOUNT · NO APP TELEMETRY · OPEN SOURCE</text>
+      <text x="1678" y="43" class="mono" text-anchor="end" fill="#c9ff4a" font-size="13" letter-spacing="1.5">127.0.0.1</text>
+    </g>
+  
+  </svg>

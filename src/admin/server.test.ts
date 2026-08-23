@@ -83,6 +83,10 @@ describe('Control Room server', () => {
     expect(html).toContain("s.detail === 'session attached' ? 'attached'");
     expect(html).toContain('Refresh titles');
     expect(html).toContain("label:'Session slot ' + (slot.index + 1)");
+    expect(html).toContain("api('slots/swap'");
+    expect(html).toContain('slot numbers unchanged');
+    expect(html).toContain('Restart ChatGPT Desktop');
+    expect(html).toContain('Micro has not attached to your sessions yet');
   });
 
   it('forwards a targeted replacement attachment to the daemon', async () => {

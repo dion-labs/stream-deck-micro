@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+    
+    <defs>
+      <radialGradient id="bgGlow" cx="82%" cy="10%" r="90%">
+        <stop offset="0" stop-color="#18200f"/>
+        <stop offset=".44" stop-color="#0b0e09"/>
+        <stop offset="1" stop-color="#070907"/>
+      </radialGradient>
+      <linearGradient id="deckBody" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#30352f"/>
+        <stop offset=".55" stop-color="#161a16"/>
+        <stop offset="1" stop-color="#0b0d0b"/>
+      </linearGradient>
+      <linearGradient id="keyFace" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#20251f"/>
+        <stop offset="1" stop-color="#0b0e0b"/>
+      </linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+        <feDropShadow dx="0" dy="26" stdDeviation="24" flood-color="#000" flood-opacity=".65"/>
+      </filter>
+      <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="12"/>
+      </filter>
+      <pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse">
+        <path d="M70 0H0V70" fill="none" stroke="#fff" stroke-opacity=".027" stroke-width="2"/>
+      </pattern>
+      <style>
+        .sans { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; }
+        .mono { font-family: 'SFMono-Regular', Menlo, Monaco, monospace; }
+      </style>
+    </defs>
+    <rect width="1920" height="960" fill="url(#bgGlow)"/><rect width="1920" height="960" fill="url(#grid)"/>
+    
+    <circle cx="105" cy="86" r="5" fill="#c9ff4a"/>
+    <text x="125" y="90" class="mono" fill="#8d9788" font-size="16" font-weight="600" letter-spacing="3">02 / SHARED SESSION CONTROL</text>
+    <text x="100" y="170" class="sans" fill="#f1f3ed" font-size="69" font-weight="650" letter-spacing="-3">Stay in Codex.</text>
+    <text x="100" y="244" class="sans" fill="#c9ff4a" font-size="69" font-weight="650" letter-spacing="-3">Reach from the deck.</text>
+    <text x="1010" y="169" class="sans" fill="#8d9788" font-size="22">The deck sends prompts into the same session</text>
+    <text x="1010" y="204" class="sans" fill="#8d9788" font-size="22">that remains open in Codex Desktop.</text>
+    <g transform="translate(100 335)">
+    <rect width="1040" height="515" rx="22" fill="#171918" stroke="#343a35" stroke-width="2" filter="url(#shadow)"/>
+    <rect width="1040" height="54" rx="22" fill="#222522"/>
+    <path d="M0 54h1040" stroke="#343a35"/>
+    <circle cx="28" cy="27" r="6" fill="#ff6b67"/><circle cx="48" cy="27" r="6" fill="#f9c64d"/><circle cx="68" cy="27" r="6" fill="#56c77a"/>
+    <text x="520" y="33" class="mono" text-anchor="middle" fill="#909890" font-size="12">CODEX DESKTOP · DECK MICRO</text>
+    <rect x="0" y="54" width="238" height="461" fill="#111312"/>
+    <text x="26" y="94" class="mono" fill="#606861" font-size="11" letter-spacing="1.6">SESSIONS</text>
+    <rect x="14" y="112" width="210" height="65" rx="9" fill="#282e26" stroke="#c9ff4a" stroke-opacity=".23"/>
+    <circle cx="36" cy="138" r="5" fill="#60a5fa"/><text x="53" y="141" class="sans" fill="#e9ece7" font-size="14" font-weight="600">deck micro</text><text x="53" y="161" class="mono" fill="#7c867a" font-size="9">working</text>
+    <circle cx="36" cy="208" r="5" fill="#566057"/><text x="53" y="212" class="sans" fill="#9aa29a" font-size="14">folioduet</text>
+    <circle cx="36" cy="253" r="5" fill="#566057"/><text x="53" y="257" class="sans" fill="#9aa29a" font-size="14">dionlabs</text>
+    <g transform="translate(278 94)">
+      <text x="0" y="0" class="mono" fill="#737c74" font-size="11" letter-spacing="1.2">SHARED SESSION · 01A02920</text>
+      <rect x="0" y="35" width="690" height="102" rx="13" fill="#202420"/>
+      <text x="24" y="70" class="mono" fill="#8d978d" font-size="11">YOU</text>
+      <text x="24" y="104" class="sans" fill="#eef1ec" font-size="19">lets do it</text>
+      <rect x="0" y="160" width="690" height="162" rx="13" fill="#111411" stroke="#283027"/>
+      <text x="24" y="196" class="mono" fill="#c9ff4a" font-size="11">CODEX</text>
+      <text x="24" y="232" class="sans" fill="#cbd1c9" font-size="17">I’m implementing the agreed layout update now.</text>
+      <rect x="24" y="258" width="395" height="39" rx="7" fill="#1d221c"/>
+      <circle cx="45" cy="278" r="5" fill="#60a5fa"/>
+      <text x="61" y="282" class="mono" fill="#8e9a8b" font-size="11">npm run check</text>
+      <rect x="0" y="348" width="690" height="54" rx="11" fill="#1b1f1b" stroke="#323832"/>
+      <text x="22" y="381" class="sans" fill="#737c74" font-size="14">Send a message…</text>
+    </g>
+  </g>
+    <g transform="translate(1290 375)">
+      <path d="M0 228H120" stroke="#c9ff4a" stroke-width="3" stroke-dasharray="8 9"/><path d="m111 218 14 10-14 10" fill="none" stroke="#c9ff4a" stroke-width="3"/>
+      <text x="8" y="207" class="mono" fill="#c9ff4a" font-size="12" letter-spacing="1.3">LOCAL BRIDGE</text>
+      <g transform="translate(160 118)">
+    <rect x="0" y="7" width="190" height="190" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="190" height="190" rx="18" fill="url(#keyFace)" stroke="#c9ff4a" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="182" height="182" rx="15" fill="#c9ff4a" fill-opacity=".09"/>
+    
+    <text x="95" y="102.60000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">DO IT</text>
+    <text x="95" y="172" class="mono" text-anchor="middle" fill="#c9ff4a" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g>
+      <text x="255" y="350" class="mono" text-anchor="middle" fill="#f1f3ed" font-size="16" font-weight="700" letter-spacing="1.6">ONE PRESS</text>
+      <text x="255" y="380" class="sans" text-anchor="middle" fill="#8d9788" font-size="18">No session handoff.</text>
+      <text x="255" y="407" class="sans" text-anchor="middle" fill="#8d9788" font-size="18">No competing owner.</text>
+    </g>
+  
+  </svg>

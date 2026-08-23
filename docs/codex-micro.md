@@ -41,4 +41,6 @@ The **Codex Micro** (kbd-1.0) is a limited-run macro keyboard co-developed by Op
 - **Sessions**: created headless via `thread/start`, persisted in `~/.codex/sessions`, resumable via `thread/resume` — so daemon restarts don't lose agent slots.
 - **State feed**: `thread/status/changed`, `turn/started`/`turn/completed`, `item/started`/`item/completed` notifications → mapped to our `AgentState` enum.
 - **Hooks**: Codex hooks/notify are outbound-only events; useful as supplementary signals for other harnesses, not as a control channel.
-- **Fallback**: if Desktop was not restarted into shared mode, externally owned threads remain visible through rollout polling and are re-acquired as soon as their writer is released.
+- **Startup guard**: Micro does not resume or attach threads until Desktop is
+  confirmed on the same WebSocket server. If Desktop starts privately, Control
+  Room requests a full restart while preserving every saved binding.
