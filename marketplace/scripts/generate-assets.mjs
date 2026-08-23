@@ -30,28 +30,69 @@ function roundedRect(ctx, x, y, width, height, radius) {
 function drawBrand(ctx, size, transparent = false) {
   if (!transparent) {
     const bg = ctx.createLinearGradient(0, 0, size, size);
-    bg.addColorStop(0, '#17101F');
-    bg.addColorStop(1, '#07120D');
+    bg.addColorStop(0, '#151816');
+    bg.addColorStop(0.56, '#090B09');
+    bg.addColorStop(1, '#11180A');
     ctx.fillStyle = bg;
-    roundedRect(ctx, 0, 0, size, size, size * 0.18);
+    roundedRect(ctx, 0, 0, size, size, size * 0.22);
     ctx.fill();
   }
-  const panel = ctx.createLinearGradient(size * 0.17, size * 0.12, size * 0.84, size * 0.88);
-  panel.addColorStop(0, '#8B5CF6');
-  panel.addColorStop(1, '#15804B');
-  ctx.fillStyle = panel;
-  roundedRect(ctx, size * 0.14, size * 0.14, size * 0.72, size * 0.72, size * 0.14);
+
+  const bodyX = size * 0.1;
+  const bodyY = size * 0.2;
+  const bodyWidth = size * 0.8;
+  const bodyHeight = size * 0.6;
+  const rim = ctx.createLinearGradient(bodyX, bodyY, bodyX + bodyWidth, bodyY + bodyHeight);
+  rim.addColorStop(0, '#8B5CF6');
+  rim.addColorStop(0.52, '#46689A');
+  rim.addColorStop(1, '#8FCB22');
+  ctx.fillStyle = rim;
+  roundedRect(ctx, bodyX, bodyY, bodyWidth, bodyHeight, size * 0.12);
   ctx.fill();
-  const key = size * 0.135;
-  const gap = size * 0.045;
-  const start = size * 0.23;
+
+  ctx.fillStyle = '#111511';
+  roundedRect(
+    ctx,
+    bodyX + size * 0.018,
+    bodyY + size * 0.018,
+    bodyWidth - size * 0.036,
+    bodyHeight - size * 0.036,
+    size * 0.105,
+  );
+  ctx.fill();
+
+  const key = size * 0.1;
+  const gapX = size * 0.035;
+  const gapY = size * 0.04;
+  const startX = size * 0.18;
+  const startY = size * 0.31;
+  const states = [
+    '#A78BFA', '#60A5FA', '#4ADE80', '#475047', '#FBBF24',
+    '#475047', '#5EEAD4', '#FB7185', '#60A5FA', '#A78BFA',
+    '#A78BFA', '#FBBF24', '#60A5FA', '#9AA8BD', '#C9FF4A',
+  ];
+
   for (let row = 0; row < 3; row += 1) {
-    for (let col = 0; col < 3; col += 1) {
-      ctx.fillStyle = row === 2 && col === 2 ? '#D7FFE7' : 'rgba(255,255,255,.88)';
-      roundedRect(ctx, start + col * (key + gap), start + row * (key + gap), key, key, key * 0.22);
+    for (let col = 0; col < 5; col += 1) {
+      const index = row * 5 + col;
+      const color = states[index];
+      const x = startX + col * (key + gapX);
+      const y = startY + row * (key + gapY);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = index === 14 ? 0.95 : 0.72;
+      roundedRect(ctx, x, y, key, key, key * 0.22);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#101410';
+      roundedRect(ctx, x + key * 0.12, y + key * 0.12, key * 0.76, key * 0.76, key * 0.15);
       ctx.fill();
     }
   }
+
+  ctx.fillStyle = '#C9FF4A';
+  ctx.beginPath();
+  ctx.arc(size * 0.835, size * 0.265, size * 0.017, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 for (const [path, size] of [

@@ -1,0 +1,190 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+    
+    <defs>
+      <radialGradient id="bgGlow" cx="82%" cy="10%" r="90%">
+        <stop offset="0" stop-color="#18200f"/>
+        <stop offset=".44" stop-color="#0b0e09"/>
+        <stop offset="1" stop-color="#070907"/>
+      </radialGradient>
+      <linearGradient id="deckBody" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#30352f"/>
+        <stop offset=".55" stop-color="#161a16"/>
+        <stop offset="1" stop-color="#0b0d0b"/>
+      </linearGradient>
+      <linearGradient id="keyFace" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#20251f"/>
+        <stop offset="1" stop-color="#0b0e0b"/>
+      </linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+        <feDropShadow dx="0" dy="26" stdDeviation="24" flood-color="#000" flood-opacity=".65"/>
+      </filter>
+      <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="12"/>
+      </filter>
+      <pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse">
+        <path d="M70 0H0V70" fill="none" stroke="#fff" stroke-opacity=".027" stroke-width="2"/>
+      </pattern>
+      <style>
+        .sans { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; }
+        .mono { font-family: 'SFMono-Regular', Menlo, Monaco, monospace; }
+      </style>
+    </defs>
+    <rect width="1920" height="960" fill="url(#bgGlow)"/><rect width="1920" height="960" fill="url(#grid)"/>
+    
+    <circle cx="105" cy="86" r="5" fill="#c9ff4a"/>
+    <text x="125" y="90" class="mono" fill="#8d9788" font-size="16" font-weight="600" letter-spacing="3">01 / LIVE SESSION SURFACE</text>
+    <text x="100" y="170" class="sans" fill="#f1f3ed" font-size="69" font-weight="650" letter-spacing="-3">See what every agent</text>
+    <text x="100" y="244" class="sans" fill="#c9ff4a" font-size="69" font-weight="650" letter-spacing="-3">needs from you.</text>
+    <g transform="translate(90 365) scale(0.88) rotate(0 362 225)" filter="url(#shadow)">
+    <rect width="746" height="470" rx="44" fill="url(#deckBody)" stroke="#5b6458" stroke-opacity=".6" stroke-width="3"/>
+    <rect x="12" y="12" width="722" height="446" rx="35" fill="none" stroke="#c9ff4a" stroke-opacity=".13" stroke-width="2"/>
+    <g transform="translate(34 34)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#a78bfa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#a78bfa" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#a78bfa" font-size="13" font-weight="700">01</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="18" font-weight="700" letter-spacing=".6">DIONLABS</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="600" letter-spacing="1.5">THINKING</text>
+    
+  </g><g transform="translate(172 34)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#60a5fa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#60a5fa" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#60a5fa" font-size="13" font-weight="700">02</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">MICRO</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="600" letter-spacing="1.5">WORKING</text>
+    
+  </g><g transform="translate(310 34)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#4ade80" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#4ade80" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#4ade80" font-size="13" font-weight="700">03</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">FOLIO</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#4ade80" font-size="10" font-weight="600" letter-spacing="1.5">COMPLETE</text>
+    
+  </g><g transform="translate(448 34)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#5e6859" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#5e6859" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#5e6859" font-size="13" font-weight="700">04</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">VOXTA</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#5e6859" font-size="10" font-weight="600" letter-spacing="1.5">IDLE</text>
+    
+  </g><g transform="translate(586 34)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#e5ffd0" stroke-opacity=".9" stroke-width="4"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#fbbf24" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#fbbf24" font-size="13" font-weight="700">05</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="18" font-weight="700" letter-spacing=".6">SIGNALS</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600" letter-spacing="1.5">ATTENTION</text>
+    <circle cx="107" cy="16" r="5" fill="#c9ff4a"/><circle cx="107" cy="16" r="12" fill="none" stroke="#c9ff4a" stroke-opacity=".3"/>
+  </g><g transform="translate(34 172)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#5e6859" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#5e6859" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#5e6859" font-size="13" font-weight="700">06</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="18" font-weight="700" letter-spacing=".6">CHESSRPG</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#5e6859" font-size="10" font-weight="600" letter-spacing="1.5">IDLE</text>
+    
+  </g><g transform="translate(172 172)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#5eead4" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#5eead4" fill-opacity=".09"/>
+    <text x="14" y="24" class="mono" fill="#5eead4" font-size="13" font-weight="700">07</text>
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">PBOT</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#5eead4" font-size="10" font-weight="600" letter-spacing="1.5">READY</text>
+    
+  </g><g transform="translate(310 172)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#fb7185" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#fb7185" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">STOP</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#fb7185" font-size="10" font-weight="600" letter-spacing="1.5">TURN</text>
+    
+  </g><g transform="translate(448 172)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#60a5fa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#60a5fa" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">STATUS</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g><g transform="translate(586 172)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#a78bfa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#a78bfa" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">TESTS</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g><g transform="translate(34 310)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#a78bfa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#a78bfa" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">REVIEW</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#a78bfa" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g><g transform="translate(172 310)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#fbbf24" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#fbbf24" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">DEBUG</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#fbbf24" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g><g transform="translate(310 310)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#60a5fa" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#60a5fa" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="18" font-weight="700" letter-spacing=".6">REFACTOR</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#60a5fa" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g><g transform="translate(448 310)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#9aa8bd" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#9aa8bd" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">SLEEP</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#9aa8bd" font-size="10" font-weight="600" letter-spacing="1.5">NOW</text>
+    
+  </g><g transform="translate(586 310)">
+    <rect x="0" y="7" width="122" height="122" rx="18" fill="#050605" opacity=".9"/>
+    <rect width="122" height="122" rx="18" fill="url(#keyFace)" stroke="#c9ff4a" stroke-opacity=".38" stroke-width="2"/>
+    <rect x="4" y="4" width="114" height="114" rx="15" fill="#c9ff4a" fill-opacity=".09"/>
+    
+    <text x="61" y="65.88000000000001" class="sans" text-anchor="middle" fill="#f1f3ed" font-size="22" font-weight="700" letter-spacing=".6">DO IT</text>
+    <text x="61" y="104" class="mono" text-anchor="middle" fill="#c9ff4a" font-size="10" font-weight="600" letter-spacing="1.5">PROMPT</text>
+    
+  </g>
+  </g>
+    <g transform="translate(960 338)">
+      <rect width="850" height="500" rx="24" fill="#0d110d" stroke="#293027" stroke-width="2"/>
+      <text x="52" y="62" class="mono" fill="#5e6859" font-size="14" letter-spacing="2.4">STATE LEGEND / REAL TIME</text>
+      <g transform="translate(54 112)">
+        <rect width="58" height="58" rx="13" fill="#a78bfa" fill-opacity=".15" stroke="#a78bfa" stroke-opacity=".55"/>
+        <circle cx="29" cy="29" r="7" fill="#a78bfa"/>
+        <text x="84" y="23" class="mono" fill="#f1f3ed" font-size="16" font-weight="700" letter-spacing="1.8">THINKING</text>
+        <text x="84" y="48" class="sans" fill="#8d9788" font-size="18">A new turn has started</text>
+      </g><g transform="translate(54 196)">
+        <rect width="58" height="58" rx="13" fill="#60a5fa" fill-opacity=".15" stroke="#60a5fa" stroke-opacity=".55"/>
+        <circle cx="29" cy="29" r="7" fill="#60a5fa"/>
+        <text x="84" y="23" class="mono" fill="#f1f3ed" font-size="16" font-weight="700" letter-spacing="1.8">WORKING</text>
+        <text x="84" y="48" class="sans" fill="#8d9788" font-size="18">A tool or command is running</text>
+      </g><g transform="translate(54 280)">
+        <rect width="58" height="58" rx="13" fill="#4ade80" fill-opacity=".15" stroke="#4ade80" stroke-opacity=".55"/>
+        <circle cx="29" cy="29" r="7" fill="#4ade80"/>
+        <text x="84" y="23" class="mono" fill="#f1f3ed" font-size="16" font-weight="700" letter-spacing="1.8">COMPLETE</text>
+        <text x="84" y="48" class="sans" fill="#8d9788" font-size="18">The latest turn finished</text>
+      </g><g transform="translate(54 364)">
+        <rect width="58" height="58" rx="13" fill="#fbbf24" fill-opacity=".15" stroke="#fbbf24" stroke-opacity=".55"/>
+        <circle cx="29" cy="29" r="7" fill="#fbbf24"/>
+        <text x="84" y="23" class="mono" fill="#f1f3ed" font-size="16" font-weight="700" letter-spacing="1.8">ATTENTION</text>
+        <text x="84" y="48" class="sans" fill="#8d9788" font-size="18">A session is waiting for you</text>
+      </g>
+      <text x="54" y="458" class="mono" fill="#c9ff4a" font-size="14" letter-spacing="1.7">PRESS A SESSION TO ACKNOWLEDGE IT →</text>
+    </g>
+  
+  </svg>

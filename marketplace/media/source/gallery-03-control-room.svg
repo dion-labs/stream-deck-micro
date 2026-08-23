@@ -1,0 +1,181 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="960" viewBox="0 0 1920 960">
+    
+    <defs>
+      <radialGradient id="bgGlow" cx="82%" cy="10%" r="90%">
+        <stop offset="0" stop-color="#18200f"/>
+        <stop offset=".44" stop-color="#0b0e09"/>
+        <stop offset="1" stop-color="#070907"/>
+      </radialGradient>
+      <linearGradient id="deckBody" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#30352f"/>
+        <stop offset=".55" stop-color="#161a16"/>
+        <stop offset="1" stop-color="#0b0d0b"/>
+      </linearGradient>
+      <linearGradient id="keyFace" x1="0" y1="0" x2="1" y2="1">
+        <stop stop-color="#20251f"/>
+        <stop offset="1" stop-color="#0b0e0b"/>
+      </linearGradient>
+      <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+        <feDropShadow dx="0" dy="26" stdDeviation="24" flood-color="#000" flood-opacity=".65"/>
+      </filter>
+      <filter id="softGlow" x="-100%" y="-100%" width="300%" height="300%">
+        <feGaussianBlur stdDeviation="12"/>
+      </filter>
+      <pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse">
+        <path d="M70 0H0V70" fill="none" stroke="#fff" stroke-opacity=".027" stroke-width="2"/>
+      </pattern>
+      <style>
+        .sans { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; }
+        .mono { font-family: 'SFMono-Regular', Menlo, Monaco, monospace; }
+      </style>
+    </defs>
+    <rect width="1920" height="960" fill="#e9ede5"/>
+    
+    <rect width="1920" height="960" fill="#e9ede5"/>
+    <rect x="0" y="0" width="620" height="960" fill="#090c09"/>
+    <circle cx="95" cy="86" r="5" fill="#c9ff4a"/>
+    <text x="115" y="90" class="mono" fill="#8d9788" font-size="16" font-weight="600" letter-spacing="3">03 / LOCAL CONTROL ROOM</text>
+    <text x="90" y="190" class="sans" fill="#f1f3ed" font-size="66" font-weight="650" letter-spacing="-3">Configure first.</text>
+    <text x="90" y="262" class="sans" fill="#c9ff4a" font-size="66" font-weight="650" letter-spacing="-3">Trigger by choice.</text>
+    <text x="90" y="345" class="sans" fill="#8d9788" font-size="21">The Control Room opens in Configure mode,</text>
+    <text x="90" y="378" class="sans" fill="#8d9788" font-size="21">so inspecting a key never launches it by mistake.</text>
+    <g transform="translate(90 470)">
+      <circle cx="8" cy="8" r="7" fill="#c9ff4a"/>
+      <text x="34" y="14" class="mono" fill="#f1f3ed" font-size="14" font-weight="700" letter-spacing="1.4">DRAG TO REORDER</text>
+      <text x="34" y="46" class="sans" fill="#8d9788" font-size="17">Move session contents while slot numbers stay fixed</text>
+    </g><g transform="translate(90 582)">
+      <circle cx="8" cy="8" r="7" fill="#c9ff4a"/>
+      <text x="34" y="14" class="mono" fill="#f1f3ed" font-size="14" font-weight="700" letter-spacing="1.4">ANY KEY, ANY ROLE</text>
+      <text x="34" y="46" class="sans" fill="#8d9788" font-size="17">Assign a session, workflow, stop, or sleep action</text>
+    </g><g transform="translate(90 694)">
+      <circle cx="8" cy="8" r="7" fill="#c9ff4a"/>
+      <text x="34" y="14" class="mono" fill="#f1f3ed" font-size="14" font-weight="700" letter-spacing="1.4">RUN MODE</text>
+      <text x="34" y="46" class="sans" fill="#8d9788" font-size="17">Test the browser deck only when you choose to</text>
+    </g>
+    <g transform="translate(680 74)" filter="url(#shadow)">
+      <rect width="1150" height="812" rx="24" fill="#f2f4ef" stroke="#cbd1c7" stroke-width="2"/>
+      <rect width="1150" height="64" rx="24" fill="#dfe4db"/>
+      <path d="M0 64h1150" stroke="#c6ccc2"/>
+      <text x="30" y="39" class="mono" fill="#3f5434" font-size="13" font-weight="700">STREAM DECK MICRO / CONTROL ROOM</text>
+      <circle cx="890" cy="32" r="5" fill="#77a724"/><text x="905" y="37" class="mono" fill="#65715f" font-size="10">LOCAL · HEALTHY</text>
+      <rect x="1014" y="17" width="108" height="30" rx="7" fill="#cfe4a8"/>
+      <text x="1068" y="37" class="mono" text-anchor="middle" fill="#365306" font-size="9" font-weight="700">CONFIGURE</text>
+      <rect x="0" y="64" width="188" height="748" fill="#e3e7df"/>
+      <text x="25" y="108" class="mono" fill="#90988c" font-size="9" letter-spacing="1.5">CONTROL</text>
+      <g transform="translate(16 128)">
+        <rect width="156" height="38" rx="7" fill="#d0dbc5"/>
+        <text x="15" y="24" class="sans" fill="#456414" font-size="12" font-weight="650">Deck layout</text>
+      </g><g transform="translate(16 176)">
+        <rect width="156" height="38" rx="7" fill="transparent"/>
+        <text x="15" y="24" class="sans" fill="#798276" font-size="12" font-weight="450">Sessions</text>
+      </g><g transform="translate(16 224)">
+        <rect width="156" height="38" rx="7" fill="transparent"/>
+        <text x="15" y="24" class="sans" fill="#798276" font-size="12" font-weight="450">Workflows</text>
+      </g><g transform="translate(16 272)">
+        <rect width="156" height="38" rx="7" fill="transparent"/>
+        <text x="15" y="24" class="sans" fill="#798276" font-size="12" font-weight="450">Device</text>
+      </g><g transform="translate(16 320)">
+        <rect width="156" height="38" rx="7" fill="transparent"/>
+        <text x="15" y="24" class="sans" fill="#798276" font-size="12" font-weight="450">Diagnostics</text>
+      </g>
+      <g transform="translate(232 105)">
+        <text x="0" y="0" class="mono" fill="#889184" font-size="10" letter-spacing="1.3">PHYSICAL LAYOUT / 5 × 3</text>
+        <text x="0" y="38" class="sans" fill="#30382d" font-size="27" font-weight="650">Arrange your surface</text>
+        <g transform="translate(0 72)"><g transform="translate(0 0)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#a78bfa" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#a78bfa" font-size="11" font-weight="700">01</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">DIONLABS</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(115 0)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#60a5fa" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#60a5fa" font-size="11" font-weight="700">02</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">MICRO</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(230 0)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#4ade80" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#4ade80" font-size="11" font-weight="700">03</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">FOLIO</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(345 0)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#5e6859" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#5e6859" font-size="11" font-weight="700">04</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">VOXTA</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(460 0)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#fbbf24" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#fbbf24" font-size="11" font-weight="700">05</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">SIGNALS</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(0 115)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#5e6859" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#5e6859" font-size="11" font-weight="700">06</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">CHESS</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(115 115)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#5eead4" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#5eead4" font-size="11" font-weight="700">07</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">PBOT</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">SESSION</text>
+    </g><g transform="translate(230 115)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#fb7185" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#fb7185" font-size="11" font-weight="700">×</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">STOP</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(345 115)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#60a5fa" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#60a5fa" font-size="11" font-weight="700">→</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">STATUS</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(460 115)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#a78bfa" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#a78bfa" font-size="11" font-weight="700">✓</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">TESTS</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(0 230)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#a78bfa" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#a78bfa" font-size="11" font-weight="700">R</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">REVIEW</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(115 230)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#fbbf24" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#fbbf24" font-size="11" font-weight="700">D</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">DEBUG</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(230 230)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#60a5fa" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#60a5fa" font-size="11" font-weight="700">RF</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">REFACTOR</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(345 230)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#9aa8bd" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#9aa8bd" font-size="11" font-weight="700">Z</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">SLEEP</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g><g transform="translate(460 230)">
+      <rect width="101" height="101" rx="12" fill="#131713" stroke="#c9ff4a" stroke-opacity=".45" stroke-width="2"/>
+      <text x="12" y="23" class="mono" fill="#c9ff4a" font-size="11" font-weight="700">GO</text>
+      <text x="50" y="59" class="sans" text-anchor="middle" fill="#e9ede7" font-size="12" font-weight="700">DO IT</text>
+      <text x="50" y="84" class="mono" text-anchor="middle" fill="#667064" font-size="8">ACTION</text>
+    </g></g>
+      </g>
+      <g transform="translate(840 105)">
+        <rect width="268" height="570" rx="14" fill="#e7ebe3" stroke="#ced4ca"/>
+        <text x="22" y="38" class="mono" fill="#8c9489" font-size="9" letter-spacing="1.3">KEY INSPECTOR</text>
+        <rect x="22" y="61" width="70" height="70" rx="12" fill="#172017" stroke="#a78bfa" stroke-opacity=".6"/>
+        <text x="57" y="88" class="mono" text-anchor="middle" fill="#a78bfa" font-size="10">02</text>
+        <text x="57" y="112" class="sans" text-anchor="middle" fill="#fff" font-size="10" font-weight="700">MICRO</text>
+        <text x="110" y="83" class="sans" fill="#374033" font-size="16" font-weight="650">Session slot 2</text>
+        <text x="110" y="108" class="mono" fill="#699514" font-size="9">ATTACHED</text>
+        <text x="22" y="171" class="mono" fill="#899186" font-size="9">KEY FUNCTION</text>
+        <rect x="22" y="188" width="224" height="42" rx="7" fill="#f2f4ef" stroke="#c9cfc5"/>
+        <text x="36" y="214" class="sans" fill="#465043" font-size="12">Session slot 2</text>
+        <text x="22" y="274" class="mono" fill="#899186" font-size="9">ATTACHED SESSION</text>
+        <rect x="22" y="292" width="224" height="93" rx="8" fill="#f2f4ef" stroke="#c9cfc5"/>
+        <text x="37" y="323" class="sans" fill="#394235" font-size="13" font-weight="650">deck micro</text>
+        <text x="37" y="349" class="mono" fill="#7a8476" font-size="9">01a02920 · shared</text>
+        <rect x="22" y="420" width="224" height="42" rx="7" fill="#dbe7cf"/>
+        <text x="134" y="446" class="mono" text-anchor="middle" fill="#456414" font-size="9" font-weight="700">BROWSE SESSIONS</text>
+      </g>
+    </g>
+  
+  </svg>
