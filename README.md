@@ -252,6 +252,8 @@ turns always keep the full deck awake. A completion or error becomes a persisten
 attention state; after the timeout, non-attention keys turn black and only those
 slots remain visible. Press an attention slot to acknowledge it and select that
 session. Starting a new turn in the session also acknowledges the previous result.
+In shared mode, clearing Codex Desktop's notification dot by viewing the thread
+also clears the matching deck attention state.
 
 When no slot needs attention, the timeout sleeps the surface. The Independent
 edition sets device brightness to zero; the Marketplace edition renders every
@@ -354,9 +356,10 @@ machine.
   removed. Micro also detects a private-server startup race, leaves session
   writers untouched, and explains the required restart in the Control Room.
 - There is no approval, voice, reasoning-effort, or new-chat key in v1.
-- Codex App Server currently exposes no reliable Desktop “thread opened” event,
-  so merely viewing a task in Desktop cannot clear deck attention. Press its slot
-  key or begin the next turn to acknowledge it.
+- Codex App Server does not currently expose Desktop's unread state. Shared mode
+  therefore mirrors Codex Desktop's read-only persisted notification-dot state
+  on a best-effort basis; if that state is unavailable or changes format, Micro
+  safely leaves deck attention in place.
 
 ## License and support
 

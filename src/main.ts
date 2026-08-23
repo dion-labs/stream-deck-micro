@@ -21,6 +21,10 @@ import {
   WriterHeldError,
   type MonitoredThread,
 } from './harness/codex-app-server/adapter.js';
+import {
+  CodexUnreadAttentionSync,
+  CodexUnreadMonitor,
+} from './harness/codex-app-server/unread.js';
 import { DeckController, type AttentionState } from './deck/controller.js';
 import { VirtualDeckDriver } from './deck/virtualDriver.js';
 import { serveIpc } from './ipc.js';
@@ -166,6 +170,8 @@ export async function runDaemon(
   let stateHydrated = false;
   let restorePromise: Promise<void> | null = null;
   let restoreError: string | null = null;
+  const unreadAttentionSync = new CodexUnreadAttentionSync();
+  const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
 
   const persistState = () => {
     // Do not replace saved bindings with an empty startup snapshot while
@@ -204,7 +210,10 @@ export async function runDaemon(
     deck.updateSelection(index);
     persistState();
   });
-  deck.on('attention', persistState);
+  deck.on('attention', () => {
+    unreadAttentionSync.track(deck.status().attention);
+    persistState();
+  });
   deck.on('mode', (mode) => log(`deck mode → ${mode}`));
   deck.on('action', (action) => {
     switch (action.kind) {
@@ -382,6 +391,17 @@ export async function runDaemon(
       }, 1500)
     : null;
   desktopPoll?.unref();
+
+  unreadMonitor?.start((unreadThreadIds) => {
+    if (!stateHydrated || desktopConnection.state !== 'connected') return;
+    const attention = deck.status().attention;
+    for (const index of unreadAttentionSync.acknowledgeable(attention, unreadThreadIds)) {
+      const sessionId = manager.snapshot(index).sessionId;
+      if (deck.acknowledge(index, false)) {
+        log(`slot ${index + 1}: attention acknowledged in Codex Desktop (${sessionId})`);
+      }
+    }
+  });
 
   /** Attach the newest (or a specific) unattached session; free slot unless slotIndex given. */
   async function attachNewest(
@@ -591,6 +611,7 @@ export async function runDaemon(
 
   const shutdown = () => {
     if (desktopPoll) clearInterval(desktopPoll);
+    unreadMonitor?.close();
     persistState();
     deck.close();
     if (existsSync(IPC_SOCKET)) unlinkSync(IPC_SOCKET);
