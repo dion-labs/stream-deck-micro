@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConfigSchema, DeckLayoutSchema, saveAppServerUrl, saveSurfaceMode } from './config.js';
 import {
+  desktopConnectionFromOutputs,
   launchAgentPlist,
   processListHasDesktopPrivateAppServer,
   validateLoopbackEndpoint,
@@ -113,5 +114,46 @@ describe('shared App Server setup', () => {
       '210 200 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl',
       `220 210 ${codex} app-server --listen stdio://`,
     ].join('\n'))).toBe(false);
+  });
+
+  it('waits for Desktop without acquiring session writers', () => {
+    const desktop = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
+    const endpoint = 'ws://127.0.0.1:17532';
+
+    expect(desktopConnectionFromOutputs('', '', endpoint)).toMatchObject({
+      state: 'waiting',
+      endpoint,
+    });
+    expect(desktopConnectionFromOutputs(`100 1 ${desktop}`, '', endpoint)).toMatchObject({
+      state: 'connecting',
+      endpoint,
+    });
+  });
+
+  it('detects Desktop on the shared WebSocket endpoint', () => {
+    const desktop = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
+    const endpoint = 'ws://127.0.0.1:17532';
+    const sockets = [
+      'COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME',
+      'ChatGPT 100 user 42u IPv4 0x1 0t0 TCP 127.0.0.1:49100->127.0.0.1:17532 (ESTABLISHED)',
+    ].join('\n');
+
+    expect(desktopConnectionFromOutputs(`100 1 ${desktop}`, sockets, endpoint)).toMatchObject({
+      state: 'connected',
+      endpoint,
+    });
+  });
+
+  it('requires a full restart when Desktop owns a private stdio server', () => {
+    const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const desktop = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
+    const status = desktopConnectionFromOutputs([
+      `100 1 ${desktop}`,
+      '110 100 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl',
+      `120 110 ${codex} app-server --listen stdio://`,
+    ].join('\n'), '', 'ws://127.0.0.1:17532');
+
+    expect(status.state).toBe('restart-required');
+    expect(status.message).toContain('Refreshing the window is not enough');
   });
 });

@@ -263,6 +263,18 @@ export const ADMIN_HTML: string = `<!doctype html>
   .livedot { background: #50564c; }
   .livedot.on { background: var(--accent); box-shadow: 0 0 0 4px rgba(200,255,99,.08), 0 0 12px rgba(200,255,99,.55); }
   .local-badge { color: #82887b; font: 10px/1.2 ui-monospace, "SFMono-Regular", monospace; letter-spacing: .07em; text-transform: uppercase; }
+  .desktop-banner {
+    max-width: 1260px; margin: 8px auto 0; padding: 12px 15px; display: flex; gap: 12px;
+    align-items: flex-start; border: 1px solid #665526; border-radius: 13px;
+    background: rgba(46,37,14,.88); color: #ead99d; position: relative; z-index: 2;
+    box-shadow: 0 14px 36px rgba(0,0,0,.2);
+  }
+  .desktop-banner[hidden] { display: none; }
+  .desktop-banner.error { border-color: #7f3434; background: rgba(54,20,20,.9); color: #ffc0c0; }
+  .desktop-banner .signal { width: 9px; height: 9px; margin-top: 5px; flex: none; border-radius: 50%; background: currentColor; box-shadow: 0 0 12px currentColor; }
+  .desktop-banner strong { display: block; color: #fff5d0; font-size: 12.5px; }
+  .desktop-banner.error strong { color: #ffe1e1; }
+  .desktop-banner span { display: block; margin-top: 2px; color: inherit; font-size: 11.5px; }
 
   main {
     max-width: 1320px; margin: 18px auto 0; padding: 0 30px 80px;
@@ -359,6 +371,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     header { padding: 20px 16px 8px; align-items: flex-start; flex-wrap: wrap; }
     .brand-lockup { width: 100%; }
     header .meta { margin-left: 0; max-width: 100%; }
+    .desktop-banner { margin: 8px 16px 0; }
     .local-badge { margin-left: auto; padding-top: 5px; }
     main { margin-top: 10px; padding: 0 12px 50px; gap: 12px; }
     .card { padding: 15px; border-radius: 18px; }
@@ -393,6 +406,10 @@ export const ADMIN_HTML: string = `<!doctype html>
     <span id="meta">connecting…</span>
   </div>
 </header>
+<div class="desktop-banner" id="desktopBanner" hidden>
+  <span class="signal"></span>
+  <div><strong id="desktopBannerTitle"></strong><span id="desktopBannerMessage"></span></div>
+</div>
 
 <main>
   <div class="card deck-card">
@@ -710,10 +727,23 @@ function executeAction(action, status) {
 function swapLayoutKeys(from, to) {
   var fromEntry = layoutDraft.find(function(entry) { return entry.keyIndex === from; });
   var toEntry = layoutDraft.find(function(entry) { return entry.keyIndex === to; });
+  if (fromEntry && toEntry && fromEntry.action.kind === 'slot' && toEntry.action.kind === 'slot') {
+    selectedKeyIndex = to;
+    return api('slots/swap', {
+      firstIndex: fromEntry.action.index,
+      secondIndex: toEntry.action.index
+    }).then(function() {
+      toast('sessions moved · slot numbers unchanged');
+      return refresh();
+    }).catch(function(error) {
+      toast(error.message, true);
+      return refresh();
+    });
+  }
   if (fromEntry) fromEntry.keyIndex = to;
   if (toEntry) toEntry.keyIndex = from;
   selectedKeyIndex = to;
-  saveLayout('layout reordered');
+  return saveLayout('layout reordered');
 }
 
 function saveLayout(message) {
@@ -776,7 +806,7 @@ function renderKeyInspector() {
       return '<option value="' + esc(option.value) + '"' + (option.value === actionValue(action) ? ' selected' : '') + '>' + esc(option.label) + '</option>';
     }).join('') + '</select>' +
     (action && action.kind === 'workflow' ? '<div class="actions"><button class="btn mini" id="editWorkflow">Edit prompt →</button></div>' : '') +
-    '<p class="hint" style="margin:9px 0 0">Choosing an action already on the deck swaps the two keys. Changes save immediately.</p></div>';
+    '<p class="hint" style="margin:9px 0 0">Drag one session onto another to move their contents while keeping slot numbers fixed. Other key changes rearrange the layout and save immediately.</p></div>';
   $('keyFunction').addEventListener('change', function() { assignKeyAction(selectedKeyIndex, actionFromValue(this.value)); });
   var edit = $('editWorkflow');
   if (edit) edit.addEventListener('click', function() { openWorkflowEditor(action.id); });
@@ -827,6 +857,30 @@ function pushFeed(line) {
   feedLines.unshift('<div><span class="t">' + new Date().toLocaleTimeString() + '</span>' + esc(line) + '</div>');
   if (feedLines.length > 8) feedLines.pop();
   $('feed').innerHTML = feedLines.join('');
+}
+
+function renderDesktopConnection(status) {
+  var desktop = status.desktop;
+  var banner = $('desktopBanner');
+  if (!desktop || desktop.state === 'not-required' || (desktop.state === 'connected' && desktop.sessionsReady)) {
+    banner.hidden = true;
+    return;
+  }
+  banner.hidden = false;
+  banner.classList.toggle('error', desktop.state === 'restart-required' || Boolean(desktop.restoreError));
+  var title = desktop.restoreError
+    ? 'Session restore needs attention'
+    : desktop.state === 'restart-required'
+      ? 'Restart ChatGPT Desktop'
+      : desktop.state === 'waiting'
+        ? 'Open ChatGPT Desktop'
+        : desktop.state === 'connected'
+          ? 'Restoring your session buttons'
+          : 'Connecting shared control';
+  $('desktopBannerTitle').textContent = title;
+  $('desktopBannerMessage').textContent = desktop.restoreError
+    ? desktop.restoreError
+    : desktop.message + ' Micro has not attached to your sessions yet.';
 }
 
 /* ---------- device tab ---------- */
@@ -1125,6 +1179,7 @@ function refresh() {
     $('meta').textContent = status.harness + ' · ' +
       attached + '/' + assigned.length + ' session keys' +
       (active ? ' · ' + active + ' active' : '');
+    renderDesktopConnection(status);
     status.slots.forEach(function(s) {
       var prev = prevStates[s.index];
       if (prev !== undefined && prev !== s.state) {

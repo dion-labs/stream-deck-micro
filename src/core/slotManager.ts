@@ -220,16 +220,22 @@ export class SlotManager {
   async send(slotIndex: number, prompt: string): Promise<void> {
     const slot = this.slots[slotIndex];
     if (!slot?.session) throw new Error(`slot ${slotIndex} has no session`);
+    const session = slot.session;
     if (slot.label === String(slotIndex + 1)) slot.label = labelFromPrompt(prompt);
     try {
-      return await slot.session.send(prompt);
+      return await session.send(prompt);
     } catch (e) {
       // aborted turns and stream errors never emit a terminal event; drive the
-      // state machine ourselves so the key can't stick on thinking/running
-      this.onSessionEvent(slotIndex, {
-        type: 'turn-failed',
-        error: e instanceof Error ? e.message : String(e),
-      });
+      // state machine ourselves so the key can't stick on thinking/running.
+      // Resolve the session's current slot because an admin drag may have moved
+      // the binding while the send was in flight.
+      const currentIndex = this.slots.findIndex((candidate) => candidate.session === session);
+      if (currentIndex >= 0) {
+        this.onSessionEvent(currentIndex, {
+          type: 'turn-failed',
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
       throw e;
     }
   }
@@ -242,6 +248,80 @@ export class SlotManager {
   interrupt(slotIndex?: number): void {
     const index = slotIndex ?? this.selectedIndex_;
     this.slots[index]?.session?.interrupt();
+  }
+
+  /**
+   * Swap the session bindings carried by two fixed numbered slots.
+   *
+   * Slot indexes are physical identities used by the deck layout, so only the
+   * attached session and its binding-specific metadata move. Event listeners
+   * are rebound synchronously, so active turns continue on their new slot.
+   */
+  swapBindings(firstIndex: number, secondIndex: number): void {
+    if (firstIndex === secondIndex) return;
+    const first = this.slots[firstIndex];
+    const second = this.slots[secondIndex];
+    if (!first || !second) throw new Error('invalid session slot');
+
+    const binding = (slot: Slot) => ({
+      sourceIndex: slot.index,
+      state: slot.state,
+      session: slot.session,
+      label: slot.label,
+      customLabel: slot.customLabel,
+      cwd: slot.cwd,
+      detail: slot.detail,
+      lastMessage: slot.lastMessage,
+      updatedAt: slot.updatedAt,
+    });
+    const firstBinding = binding(first);
+    const secondBinding = binding(second);
+
+    for (const index of [firstIndex, secondIndex]) {
+      const slot = this.slots[index];
+      slot.unsubscribe?.();
+      slot.unsubscribe = null;
+      this.clearDecay(index);
+      this.clearFeedback(index);
+    }
+
+    const apply = (slot: Slot, value: ReturnType<typeof binding>) => {
+      // Completion/error flashes and attachment confirmations are transient.
+      // Normalize them while moving so clearing their old timers cannot leave
+      // the destination stuck; persistent attention is restored by session ID.
+      slot.state = value.state === 'done' || value.state === 'error' ? 'idle' : value.state;
+      slot.session = value.session;
+      slot.label = value.label === String(value.sourceIndex + 1)
+        ? String(slot.index + 1)
+        : value.label;
+      slot.customLabel = value.customLabel;
+      slot.cwd = value.cwd;
+      slot.detail = value.detail === 'session attached' ? '' : value.detail;
+      slot.lastMessage = value.lastMessage;
+      slot.updatedAt = value.updatedAt;
+      slot.unsubscribe = slot.session
+        ? slot.session.onEvent((event) => this.onSessionEvent(slot.index, event))
+        : null;
+      if (!slot.session) {
+        slot.state = 'empty';
+        slot.label = String(slot.index + 1);
+        slot.customLabel = null;
+        slot.detail = '';
+        slot.lastMessage = null;
+      }
+    };
+    apply(first, secondBinding);
+    apply(second, firstBinding);
+
+    const previousSelection = this.selectedIndex_;
+    if (previousSelection === firstIndex) this.selectedIndex_ = secondIndex;
+    else if (previousSelection === secondIndex) this.selectedIndex_ = firstIndex;
+
+    this.emitSlot(firstIndex);
+    this.emitSlot(secondIndex);
+    if (this.selectedIndex_ !== previousSelection) {
+      this.emitter.emit('select', this.selectedIndex_);
+    }
   }
 
   /** Clear a slot back to empty (unbind session). */

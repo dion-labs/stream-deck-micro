@@ -172,6 +172,40 @@ describe('SlotManager', () => {
     expect(created[0].interruptMock).toHaveBeenCalled();
   });
 
+  it('swaps session contents while numbered slot identities stay fixed', () => {
+    const { adapter } = makeAdapter();
+    const m = manager(adapter);
+    const second = new FakeSession('second');
+    second.name = 'Second project';
+    const third = new FakeSession('third');
+    third.name = 'Third project';
+    m.attachSession(1, second);
+    m.attachSession(2, third);
+    m.rename(1, 'Pinned second');
+    m.select(1);
+    second.emit({ type: 'turn-started' });
+
+    m.swapBindings(1, 2);
+
+    expect(m.snapshot(1)).toMatchObject({
+      index: 1,
+      sessionId: 'third',
+      label: 'Third project',
+    });
+    expect(m.snapshot(2)).toMatchObject({
+      index: 2,
+      sessionId: 'second',
+      label: 'Pinned second',
+      customLabel: 'Pinned second',
+      state: 'thinking',
+    });
+    expect(m.selectedIndex).toBe(2);
+
+    second.emit({ type: 'tool-started', tool: 'shell', detail: 'npm test' });
+    expect(m.snapshot(2).state).toBe('running');
+    expect(m.snapshot(2).detail).toBe('npm test');
+  });
+
   it('clear resets a slot to empty and frees it', async () => {
     const { adapter } = makeAdapter();
     const m = manager(adapter);

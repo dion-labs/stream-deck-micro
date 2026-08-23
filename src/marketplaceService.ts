@@ -11,7 +11,12 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { APP_DIR, IPC_SOCKET, saveSurfaceMode } from './config.js';
 import { ipcCall } from './ipc.js';
-import { installSharedServer, launchAgentPlist, sharedServerStatus } from './sharedServer.js';
+import {
+  installSharedServer,
+  launchAgentPlist,
+  sharedServerStatus,
+  type DesktopConnectionStatus,
+} from './sharedServer.js';
 
 export const MARKETPLACE_BRIDGE_LABEL = 'ai.dionlabs.stream-deck-micro.marketplace-bridge';
 const LAUNCH_AGENTS_DIR = join(homedir(), 'Library', 'LaunchAgents');
@@ -31,6 +36,7 @@ export interface MarketplaceServiceStatus {
   configPath: string | null;
   sharedServerHealthy: boolean;
   desktopRestartRequired: boolean;
+  desktopConnection: DesktopConnectionStatus;
 }
 
 export async function installMarketplaceService(
@@ -93,6 +99,7 @@ export async function marketplaceServiceStatus(): Promise<MarketplaceServiceStat
     configPath: state?.configPath ?? null,
     sharedServerHealthy: shared.healthy,
     desktopRestartRequired: shared.desktopRestartRequired,
+    desktopConnection: shared.desktopConnection,
   };
 }
 

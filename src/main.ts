@@ -26,6 +26,10 @@ import { VirtualDeckDriver } from './deck/virtualDriver.js';
 import { serveIpc } from './ipc.js';
 import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
+import {
+  desktopConnectionStatus,
+  type DesktopConnectionStatus,
+} from './sharedServer.js';
 
 interface PersistedState {
   slots: {
@@ -150,6 +154,30 @@ export async function runDaemon(
 
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
+  const persisted = loadState();
+  const sharedEndpoint = config.appServer.url;
+  let desktopConnection: DesktopConnectionStatus = sharedEndpoint
+    ? desktopConnectionStatus(sharedEndpoint)
+    : {
+        state: 'not-required',
+        endpoint: null,
+        message: 'This daemon owns its private Codex App Server.',
+      };
+  let stateHydrated = false;
+  let restorePromise: Promise<void> | null = null;
+  let restoreError: string | null = null;
+
+  const persistState = () => {
+    // Do not replace saved bindings with an empty startup snapshot while
+    // Desktop is still joining the shared server.
+    if (stateHydrated) saveState(manager, config.slots.cwd, deck);
+  };
+
+  function assertDesktopReady(): void {
+    if (!sharedEndpoint) return;
+    if (desktopConnection.state !== 'connected') throw new Error(desktopConnection.message);
+    if (!stateHydrated) throw new Error('Shared control is connected; session bindings are still restoring.');
+  }
 
   /** Notify when a slot transitions into done/error (turn finished). */
   const prevStates = new Map<number, string>();
@@ -170,13 +198,13 @@ export async function runDaemon(
   manager.on('slot', (snapshot) => {
     deck.updateSlot(snapshot);
     maybeNotify(snapshot);
-    saveState(manager, config.slots.cwd, deck);
+    persistState();
   });
   manager.on('select', (index) => {
     deck.updateSelection(index);
-    saveState(manager, config.slots.cwd, deck);
+    persistState();
   });
-  deck.on('attention', () => saveState(manager, config.slots.cwd, deck));
+  deck.on('attention', persistState);
   deck.on('mode', (mode) => log(`deck mode → ${mode}`));
   deck.on('action', (action) => {
     switch (action.kind) {
@@ -203,76 +231,113 @@ export async function runDaemon(
       case 'workflow': {
         const workflow = config.workflows.find((w) => w.id === action.id);
         if (!workflow) break;
+        try {
+          assertDesktopReady();
+        } catch (error) {
+          log('workflow blocked:', error instanceof Error ? error.message : String(error));
+          break;
+        }
         manager.sendSelected(workflow.prompt).catch((e) => log('workflow failed:', String(e)));
         break;
       }
     }
   });
 
-  // restore persisted sessions; threads still open in another window fall back
-  // to monitor-only bindings so they stay visible on the deck
-  const persisted = loadState();
-  if (persisted) {
-    const configuredSlots = new Set(assignedSlotIndexes());
-    const currentRecords = appServer
-      ? await appServer.listThreadRecords().catch(() => [] as MonitoredThread[])
-      : [];
-    const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
-    const restoredSessionIds = new Set<string>();
-    for (const slot of persisted.slots) {
-      if (slot.index >= config.slots.count || !configuredSlots.has(slot.index)) continue;
-      if (restoredSessionIds.has(slot.sessionId)) {
-        log(`slot ${slot.index + 1}: skipped duplicate session ${slot.sessionId}`);
-        continue;
-      }
-      const currentRecord = currentRecordsById.get(slot.sessionId);
-      const currentLabel = currentRecord?.name ?? slot.label;
-      try {
-        await manager.resumeSession(slot.index, slot.sessionId, slot.cwd, currentLabel ?? undefined);
-      } catch (e) {
-        if (appServer && e instanceof WriterHeldError) {
-          await attachMonitor(appServer, manager, slot.index, {
-            ...currentRecord,
-            id: slot.sessionId,
-            name: currentLabel ?? null,
-            cwd: currentRecord?.cwd ?? slot.cwd,
-          });
-          log(`slot ${slot.index + 1}: writer held elsewhere → monitor-only`);
-        } else {
-          log(`resume slot ${slot.index} failed:`, String(e));
+  async function hydrateSessions(): Promise<void> {
+    // Calling thread/resume before Desktop joins this exact App Server can take
+    // every persisted writer lock and leave Desktop read-only.
+    if (persisted) {
+      const configuredSlots = new Set(assignedSlotIndexes());
+      const currentRecords = await appServer
+        .listThreadRecords()
+        .catch(() => [] as MonitoredThread[]);
+      const currentRecordsById = new Map(currentRecords.map((record) => [record.id, record]));
+      const restoredSessionIds = new Set<string>();
+      for (const slot of persisted.slots) {
+        if (slot.index >= config.slots.count || !configuredSlots.has(slot.index)) continue;
+        if (restoredSessionIds.has(slot.sessionId)) {
+          log(`slot ${slot.index + 1}: skipped duplicate session ${slot.sessionId}`);
           continue;
         }
+        const currentRecord = currentRecordsById.get(slot.sessionId);
+        const currentLabel = currentRecord?.name ?? slot.label;
+        try {
+          await manager.resumeSession(slot.index, slot.sessionId, slot.cwd, currentLabel ?? undefined);
+        } catch (e) {
+          if (e instanceof WriterHeldError) {
+            await attachMonitor(appServer, manager, slot.index, {
+              ...currentRecord,
+              id: slot.sessionId,
+              name: currentLabel ?? null,
+              cwd: currentRecord?.cwd ?? slot.cwd,
+            });
+            log(`slot ${slot.index + 1}: writer held elsewhere → monitor-only`);
+          } else {
+            log(`resume slot ${slot.index} failed:`, String(e));
+            continue;
+          }
+        }
+        restoredSessionIds.add(slot.sessionId);
+        if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
       }
-      restoredSessionIds.add(slot.sessionId);
-      if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
+      const restoredSelection = configuredSlots.has(persisted.selectedIndex)
+        ? persisted.selectedIndex
+        : assignedSlotIndexes()[0];
+      if (restoredSelection !== undefined) manager.select(restoredSelection);
     }
-    const restoredSelection = configuredSlots.has(persisted.selectedIndex)
-      ? persisted.selectedIndex
-      : assignedSlotIndexes()[0];
-    if (restoredSelection !== undefined) manager.select(restoredSelection);
-    saveState(manager, config.slots.cwd, deck);
+
+    // Fill remaining visible slots with the newest external sessions.
+    if (config.attachExternal) {
+      try {
+        const records = await appServer.listThreadRecords();
+        const alreadyBound = new Set(manager.snapshots().map((s) => s.sessionId));
+        const visibleSlots = assignedSlotIndexes();
+        for (const record of records) {
+          if (visibleSlots.every((index) => manager.snapshot(index).state !== 'empty')) break;
+          if (record.ephemeral || alreadyBound.has(record.id)) continue;
+          const index = visibleSlots.find((slotIndex) => manager.snapshot(slotIndex).state === 'empty');
+          if (index === undefined) break;
+          await bindThreadRecord(appServer, manager, index, record);
+        }
+      } catch (e) {
+        log('external attach failed:', String(e));
+      }
+    }
+
+    stateHydrated = true;
+    restoreError = null;
+    if (persisted?.attention?.length) deck.restoreAttention(persisted.attention);
+    deck.render(manager.snapshots(), manager.selectedIndex);
+    persistState();
+    log('session bindings ready');
   }
 
-  // fill remaining slots with the newest external sessions (desktop/VS Code/TUI)
-  if (appServer && config.attachExternal) {
-    try {
-      const records = await appServer.listThreadRecords();
-      const alreadyBound = new Set(manager.snapshots().map((s) => s.sessionId));
-      const visibleSlots = assignedSlotIndexes();
-      for (const record of records) {
-        if (visibleSlots.every((index) => manager.snapshot(index).state !== 'empty')) break;
-        if (record.ephemeral || alreadyBound.has(record.id)) continue;
-        const index = visibleSlots.find((slotIndex) => manager.snapshot(slotIndex).state === 'empty');
-        if (index === undefined) break;
-        await bindThreadRecord(appServer, manager, index, record);
-      }
-    } catch (e) {
-      log('external attach failed:', String(e));
+  function ensureSessionsHydrated(): Promise<void> {
+    if (stateHydrated) return Promise.resolve();
+    if (restorePromise) return restorePromise;
+    restorePromise = hydrateSessions().catch((error) => {
+      restoreError = error instanceof Error ? error.message : String(error);
+      restorePromise = null;
+      log('session restore failed:', restoreError);
+      throw error;
+    });
+    return restorePromise;
+  }
+
+  async function refreshDesktopConnection(): Promise<void> {
+    if (!sharedEndpoint) {
+      await ensureSessionsHydrated();
+      return;
     }
+    const next = desktopConnectionStatus(sharedEndpoint);
+    if (next.state !== desktopConnection.state) {
+      log(`desktop shared control → ${next.state}`);
+    }
+    desktopConnection = next;
+    if (next.state === 'connected') await ensureSessionsHydrated();
   }
 
   deck.render(manager.snapshots(), manager.selectedIndex);
-  if (persisted?.attention?.length) deck.restoreAttention(persisted.attention);
   try {
     await serveIpc(IPC_SOCKET, (cmd, args) => handleIpc(cmd, args));
   } catch (e) {
@@ -308,12 +373,22 @@ export async function runDaemon(
     }
   }
 
+  await refreshDesktopConnection().catch(() => {
+    // The detailed restore/routing failure is already logged and exposed in status.
+  });
+  const desktopPoll = sharedEndpoint
+    ? setInterval(() => {
+        void refreshDesktopConnection().catch(() => {});
+      }, 1500)
+    : null;
+  desktopPoll?.unref();
+
   /** Attach the newest (or a specific) unattached session; free slot unless slotIndex given. */
   async function attachNewest(
     wantedId?: string,
     slotIndex?: number,
   ): Promise<{ index: number; mode: string; name: string | null }> {
-    if (!appServer) throw new Error('only supported with the codex-app-server harness');
+    assertDesktopReady();
     const records = await appServer.listThreadRecords();
     const record = wantedId
       ? records.find((r) => r.id === wantedId)
@@ -348,8 +423,14 @@ export async function runDaemon(
           slots: manager.snapshots(),
           workflows: config.workflows,
           deck: deck.status(),
+          desktop: {
+            ...desktopConnection,
+            sessionsReady: stateHydrated,
+            restoreError,
+          },
         };
       case 'send': {
+        assertDesktopReady();
         const text = String(args.text ?? '');
         if (!text) throw new Error('text required');
         // fire and forget: state arrives via slot events; don't hold the ipc for a whole turn
@@ -357,6 +438,7 @@ export async function runDaemon(
         return { accepted: true };
       }
       case 'new': {
+        assertDesktopReady();
         const target = assignedSlotIndexes().find((index) => manager.snapshot(index).state === 'empty');
         if (target === undefined) throw new Error('no free session button');
         const index = await manager.createSession(args.cwd ? String(args.cwd) : undefined, target);
@@ -389,10 +471,27 @@ export async function runDaemon(
         }
         if (manager.snapshot(index).state === 'empty') throw new Error('slot is empty');
         manager.rename(index, args.label === undefined || args.label === null ? null : String(args.label));
-        saveState(manager, config.slots.cwd, deck);
+        persistState();
         return { renamed: index };
       }
+      case 'slots.swap': {
+        const firstIndex = Number(args.firstIndex);
+        const secondIndex = Number(args.secondIndex);
+        for (const index of [firstIndex, secondIndex]) {
+          if (!Number.isInteger(index) || index < 0 || index >= config.slots.count) {
+            throw new Error(`index must be 0..${config.slots.count - 1}`);
+          }
+        }
+        const attention = deck.status().attention
+          .filter((entry): entry is typeof entry & { sessionId: string } => Boolean(entry.sessionId))
+          .map(({ sessionId, state }) => ({ sessionId, state }));
+        manager.swapBindings(firstIndex, secondIndex);
+        deck.restoreAttention(attention);
+        persistState();
+        return { firstIndex, secondIndex, selectedIndex: manager.selectedIndex };
+      }
       case 'workflow': {
+        assertDesktopReady();
         const workflow = config.workflows.find((w) => w.id === String(args.id));
         if (!workflow) throw new Error(`unknown workflow: ${String(args.id)}`);
         manager.sendSelected(workflow.prompt).catch((e) => log('workflow failed:', String(e)));
@@ -491,7 +590,8 @@ export async function runDaemon(
   }
 
   const shutdown = () => {
-    saveState(manager, config.slots.cwd, deck);
+    if (desktopPoll) clearInterval(desktopPoll);
+    persistState();
     deck.close();
     if (existsSync(IPC_SOCKET)) unlinkSync(IPC_SOCKET);
     void adminServer?.close();

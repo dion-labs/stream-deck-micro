@@ -122,6 +122,11 @@ After `shared install`, fully quit Codex Desktop with **Codex → Quit Codex** a
 open it again. Closing only the window is not enough. This one-time restart
 makes Desktop inherit the shared App Server endpoint.
 
+At login, Stream Deck Micro waits until Desktop is connected to that shared
+endpoint before restoring or attaching any session. If Desktop wins the startup
+race with a private server, the Control Room asks for a full Desktop restart and
+keeps the saved bindings untouched; reloading the Desktop window is not enough.
+
 The installer:
 
 - starts a loopback-only Codex App Server at `ws://127.0.0.1:17532`;
@@ -346,8 +351,8 @@ machine.
 - The Elgato application must be closed only while the Independent edition owns
   the device.
 - Codex Desktop must be fully restarted after shared mode is installed or
-  removed. A Desktop version that does not support its WebSocket endpoint hook
-  can still be observed through the polling fallback, but cannot share writes.
+  removed. Micro also detects a private-server startup race, leaves session
+  writers untouched, and explains the required restart in the Control Room.
 - There is no approval, voice, reasoning-effort, or new-chat key in v1.
 - Codex App Server currently exposes no reliable Desktop “thread opened” event,
   so merely viewing a task in Desktop cannot clear deck attention. Press its slot

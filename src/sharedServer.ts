@@ -25,6 +25,19 @@ const INSTALL_STATE = join(APP_DIR, 'shared-server.json');
 const DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
 const DESKTOP_APP = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
 
+export type DesktopConnectionState =
+  | 'not-required'
+  | 'waiting'
+  | 'connecting'
+  | 'restart-required'
+  | 'connected';
+
+export interface DesktopConnectionStatus {
+  state: DesktopConnectionState;
+  endpoint: string | null;
+  message: string;
+}
+
 interface SharedInstallState {
   url: string;
   codexPath: string;
@@ -39,6 +52,7 @@ export interface SharedServerStatus {
   desktopEndpoint: string | null;
   codexPath: string | null;
   configPath: string | null;
+  desktopConnection: DesktopConnectionStatus;
 }
 
 export async function installSharedServer(
@@ -118,15 +132,68 @@ export async function sharedServerStatus(
 ): Promise<SharedServerStatus> {
   const state = readInstallState();
   const url = state?.url ?? fallbackUrl;
+  const desktopConnection = desktopConnectionStatus(url);
   return {
     installed: existsSync(SERVER_PLIST) && existsSync(ENV_PLIST),
     healthy: await isHealthy(url),
-    desktopRestartRequired: desktopUsesPrivateAppServer(),
+    desktopRestartRequired: desktopConnection.state === 'restart-required',
     url,
     desktopEndpoint: launchctlOutput(['getenv', DESKTOP_ENDPOINT_ENV]),
     codexPath: state?.codexPath ?? null,
     configPath: state?.configPath ?? null,
+    desktopConnection,
   };
+}
+
+/** Inspect whether ChatGPT Desktop has joined the shared WebSocket endpoint. */
+export function desktopConnectionStatus(endpoint: string): DesktopConnectionStatus {
+  let processes = '';
+  try {
+    processes = execFileSync('/bin/ps', ['-ax', '-o', 'pid=,ppid=,command='], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5000,
+    });
+  } catch {
+    return desktopStatus('waiting', endpoint);
+  }
+
+  const desktopPids = desktopProcessIds(processes);
+  let sockets = '';
+  if (desktopPids.length) {
+    try {
+      const port = new URL(endpoint).port;
+      sockets = execFileSync(
+        '/usr/sbin/lsof',
+        ['-nP', '-a', '-p', desktopPids.join(','), `-iTCP:${port}`, '-sTCP:ESTABLISHED'],
+        {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 5000,
+        },
+      );
+    } catch {
+      // lsof exits with status 1 when there are no matching sockets.
+    }
+  }
+  return desktopConnectionFromOutputs(processes, sockets, endpoint);
+}
+
+/** Pure routing classifier, exported so startup ownership behavior stays regression-tested. */
+export function desktopConnectionFromOutputs(
+  processes: string,
+  sockets: string,
+  endpoint: string,
+): DesktopConnectionStatus {
+  const desktopPids = desktopProcessIds(processes);
+  if (!desktopPids.length) return desktopStatus('waiting', endpoint);
+  if (processListHasDesktopPrivateAppServer(processes)) {
+    return desktopStatus('restart-required', endpoint);
+  }
+  if (socketListHasSharedDesktop(sockets, endpoint)) {
+    return desktopStatus('connected', endpoint);
+  }
+  return desktopStatus('connecting', endpoint);
 }
 
 /** True while a running Desktop instance still owns its old private stdio server. */
@@ -145,12 +212,7 @@ export function desktopUsesPrivateAppServer(): boolean {
 
 /** Distinguish Desktop's private server from tool/CLI servers using the same bundled binary. */
 export function processListHasDesktopPrivateAppServer(processes: string): boolean {
-  const records = new Map<number, { ppid: number; command: string }>();
-  for (const line of processes.split('\n')) {
-    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
-    if (!match) continue;
-    records.set(Number(match[1]), { ppid: Number(match[2]), command: match[3] });
-  }
+  const records = parseProcessList(processes);
   for (const record of records.values()) {
     if (record.command !== `${DESKTOP_CODEX} app-server --listen stdio://`) continue;
     let parent = records.get(record.ppid);
@@ -162,6 +224,44 @@ export function processListHasDesktopPrivateAppServer(processes: string): boolea
     }
   }
   return false;
+}
+
+function parseProcessList(processes: string): Map<number, { ppid: number; command: string }> {
+  const records = new Map<number, { ppid: number; command: string }>();
+  for (const line of processes.split('\n')) {
+    const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
+    if (!match) continue;
+    records.set(Number(match[1]), { ppid: Number(match[2]), command: match[3] });
+  }
+  return records;
+}
+
+function desktopProcessIds(processes: string): number[] {
+  return [...parseProcessList(processes)]
+    .filter(([, record]) =>
+      record.command === DESKTOP_APP || record.command.startsWith(`${DESKTOP_APP} `))
+    .map(([pid]) => pid);
+}
+
+function socketListHasSharedDesktop(sockets: string, endpoint: string): boolean {
+  const port = new URL(endpoint).port.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(
+    `->(?:127\\.0\\.0\\.1|localhost|\\[::1\\]):${port}\\s+\\(ESTABLISHED\\)`,
+  ).test(sockets);
+}
+
+function desktopStatus(
+  state: Exclude<DesktopConnectionState, 'not-required'>,
+  endpoint: string,
+): DesktopConnectionStatus {
+  const messages: Record<Exclude<DesktopConnectionState, 'not-required'>, string> = {
+    waiting: 'Open ChatGPT Desktop to enable shared session control.',
+    connecting: 'Waiting for ChatGPT Desktop to join the shared session server.',
+    'restart-required':
+      'Fully quit and reopen ChatGPT Desktop to enable shared control. Refreshing the window is not enough.',
+    connected: 'ChatGPT Desktop and Stream Deck Micro are sharing one session server.',
+  };
+  return { state, endpoint, message: messages[state] };
 }
 
 export function validateLoopbackEndpoint(value: string): string {
