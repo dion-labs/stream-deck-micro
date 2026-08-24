@@ -32,6 +32,7 @@ import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
 import {
   desktopConnectionStatus,
+  restartCodexDesktop,
   type DesktopConnectionStatus,
 } from './sharedServer.js';
 
@@ -170,6 +171,7 @@ export async function runDaemon(
   let stateHydrated = false;
   let restorePromise: Promise<void> | null = null;
   let restoreError: string | null = null;
+  let desktopRestartPromise: Promise<void> | null = null;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
   const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
 
@@ -215,6 +217,11 @@ export async function runDaemon(
     persistState();
   });
   deck.on('mode', (mode) => log(`deck mode → ${mode}`));
+  deck.on('restartCodex', () => {
+    void beginDesktopRestart().catch(() => {
+      // The detailed failure is logged and the recovery key is restored.
+    });
+  });
   deck.on('action', (action) => {
     switch (action.kind) {
       case 'slot':
@@ -344,8 +351,52 @@ export async function runDaemon(
     }
     desktopConnection = next;
     if (next.state === 'connected') await ensureSessionsHydrated();
+    syncDesktopRecoverySurface();
   }
 
+  function syncDesktopRecoverySurface(): void {
+    deck.setDesktopRecovery(
+      desktopRestartPromise
+        ? 'restarting'
+        : desktopConnection.state === 'restart-required'
+          ? 'restart-required'
+          : null,
+    );
+  }
+
+  function beginDesktopRestart(): Promise<void> {
+    if (desktopRestartPromise) return desktopRestartPromise;
+    if (!sharedEndpoint || desktopConnection.state !== 'restart-required') {
+      return Promise.reject(new Error('Codex Desktop does not currently require a shared-mode restart'));
+    }
+    desktopRestartPromise = (async () => {
+      syncDesktopRecoverySurface();
+      log('Codex Desktop restart requested from the deck');
+      await restartCodexDesktop();
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await refreshDesktopConnection();
+        if (desktopConnection.state === 'connected' && stateHydrated) {
+          log('Codex Desktop reconnected; session buttons restored');
+          return;
+        }
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+      }
+      throw new Error('Codex Desktop reopened but did not join the shared server');
+    })().catch((error) => {
+      log('Codex Desktop restart failed:', error instanceof Error ? error.message : String(error));
+      throw error;
+    }).finally(() => {
+      desktopRestartPromise = null;
+      desktopConnection = sharedEndpoint
+        ? desktopConnectionStatus(sharedEndpoint)
+        : desktopConnection;
+      syncDesktopRecoverySurface();
+    });
+    syncDesktopRecoverySurface();
+    return desktopRestartPromise;
+  }
+
+  syncDesktopRecoverySurface();
   deck.render(manager.snapshots(), manager.selectedIndex);
   try {
     await serveIpc(IPC_SOCKET, (cmd, args) => handleIpc(cmd, args));
@@ -595,6 +646,9 @@ export async function runDaemon(
       case 'deck.wake':
         deck.wake();
         return deck.status();
+      case 'desktop.restart':
+        void beginDesktopRestart().catch(() => {});
+        return { accepted: true };
       case 'deck.key': {
         if (!virtualDeck) throw new Error('deck.key is only available in marketplace surface mode');
         const index = Number(args.index);

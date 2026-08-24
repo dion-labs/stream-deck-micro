@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFile, execFileSync } from 'node:child_process';
 import {
   accessSync,
   chmodSync,
@@ -42,6 +42,13 @@ interface SharedInstallState {
   url: string;
   codexPath: string;
   configPath: string;
+}
+
+export interface CodexDesktopLifecycle {
+  requestQuit(): Promise<void>;
+  isRunning(): boolean;
+  open(): Promise<void>;
+  wait(ms: number): Promise<void>;
 }
 
 export interface SharedServerStatus {
@@ -214,7 +221,10 @@ export function desktopUsesPrivateAppServer(): boolean {
 export function processListHasDesktopPrivateAppServer(processes: string): boolean {
   const records = parseProcessList(processes);
   for (const record of records.values()) {
-    if (record.command !== `${DESKTOP_CODEX} app-server --listen stdio://`) continue;
+    if (
+      !record.command.startsWith(`${DESKTOP_CODEX} `)
+      || !/(?:^|\s)app-server(?:\s|$)/.test(record.command)
+    ) continue;
     let parent = records.get(record.ppid);
     const visited = new Set<number>();
     while (parent && !visited.has(parent.ppid)) {
@@ -224,6 +234,25 @@ export function processListHasDesktopPrivateAppServer(processes: string): boolea
     }
   }
   return false;
+}
+
+/**
+ * Gracefully restart Codex Desktop after the user explicitly requests recovery.
+ * The shared endpoint is already installed in launchd before this can be called.
+ */
+export async function restartCodexDesktop(
+  lifecycle: CodexDesktopLifecycle = macCodexDesktopLifecycle,
+  pollAttempts = 40,
+): Promise<void> {
+  await lifecycle.requestQuit();
+  for (let attempt = 0; attempt < pollAttempts; attempt += 1) {
+    if (!lifecycle.isRunning()) {
+      await lifecycle.open();
+      return;
+    }
+    if (attempt < pollAttempts - 1) await lifecycle.wait(250);
+  }
+  throw new Error('ChatGPT Desktop did not quit; close it manually and press RESTART CODEX again');
 }
 
 function parseProcessList(processes: string): Map<number, { ppid: number; command: string }> {
@@ -241,6 +270,38 @@ function desktopProcessIds(processes: string): number[] {
     .filter(([, record]) =>
       record.command === DESKTOP_APP || record.command.startsWith(`${DESKTOP_APP} `))
     .map(([pid]) => pid);
+}
+
+const macCodexDesktopLifecycle: CodexDesktopLifecycle = {
+  async requestQuit() {
+    if (!desktopAppIsRunning()) return;
+    await execFilePromise('/usr/bin/osascript', ['-e', 'tell application "ChatGPT" to quit']);
+  },
+  isRunning: desktopAppIsRunning,
+  open: () => execFilePromise('/usr/bin/open', ['-a', 'ChatGPT']),
+  wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+};
+
+function desktopAppIsRunning(): boolean {
+  try {
+    const processes = execFileSync('/bin/ps', ['-ax', '-o', 'pid=,ppid=,command='], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 5000,
+    });
+    return desktopProcessIds(processes).length > 0;
+  } catch {
+    return true;
+  }
+}
+
+function execFilePromise(command: string, args: string[]): Promise<void> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    execFile(command, args, { timeout: 10_000 }, (error) => {
+      if (error) rejectPromise(error);
+      else resolvePromise();
+    });
+  });
 }
 
 function socketListHasSharedDesktop(sockets: string, endpoint: string): boolean {

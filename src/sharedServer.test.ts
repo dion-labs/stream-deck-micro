@@ -7,6 +7,7 @@ import {
   desktopConnectionFromOutputs,
   launchAgentPlist,
   processListHasDesktopPrivateAppServer,
+  restartCodexDesktop,
   validateLoopbackEndpoint,
 } from './sharedServer.js';
 
@@ -101,13 +102,17 @@ describe('shared App Server setup', () => {
     expect(ConfigSchema.parse(saved).surface.mode).toBe('marketplace');
   });
 
-  it('only treats a private stdio server owned by Desktop as restart evidence', () => {
+  it('only treats a private app server owned by Desktop as restart evidence', () => {
     const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
     const desktop = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
     expect(processListHasDesktopPrivateAppServer([
       `100 1 ${desktop}`,
       '110 100 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl',
       `120 110 ${codex} app-server --listen stdio://`,
+    ].join('\n'))).toBe(true);
+    expect(processListHasDesktopPrivateAppServer([
+      `100 1 ${desktop}`,
+      `120 100 ${codex} -c features.code_mode_host=true app-server --analytics-default-enabled`,
     ].join('\n'))).toBe(true);
     expect(processListHasDesktopPrivateAppServer([
       `200 1 ${codex} app-server --listen ws://127.0.0.1:17532`,
@@ -155,5 +160,30 @@ describe('shared App Server setup', () => {
 
     expect(status.state).toBe('restart-required');
     expect(status.message).toContain('Refreshing the window is not enough');
+  });
+
+  it('gracefully quits, waits for exit, and reopens Desktop', async () => {
+    const calls: string[] = [];
+    const running = [true, true, false];
+    await restartCodexDesktop({
+      requestQuit: async () => { calls.push('quit'); },
+      isRunning: () => running.shift() ?? false,
+      open: async () => { calls.push('open'); },
+      wait: async () => { calls.push('wait'); },
+    });
+
+    expect(calls).toEqual(['quit', 'wait', 'wait', 'open']);
+  });
+
+  it('does not reopen Desktop before it has actually quit', async () => {
+    const calls: string[] = [];
+    await expect(restartCodexDesktop({
+      requestQuit: async () => { calls.push('quit'); },
+      isRunning: () => true,
+      open: async () => { calls.push('open'); },
+      wait: async () => { calls.push('wait'); },
+    }, 2)).rejects.toThrow('did not quit');
+
+    expect(calls).toEqual(['quit', 'wait']);
   });
 });

@@ -293,6 +293,34 @@ describe('DeckController', () => {
     c.close();
   });
 
+  it('shows one central restart key and makes every other key inert during recovery', () => {
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, 'idle')), 0);
+    const restarts: string[] = [];
+    const actions: unknown[] = [];
+    c.on('restartCodex', () => restarts.push('restart'));
+    c.on('action', (action) => actions.push(action));
+
+    c.setDesktopRecovery('restart-required');
+    expect(c.status().desktopRecovery).toBe('restart-required');
+    expect([...deck.fills.keys()]).toEqual([7]);
+
+    deck.press(0);
+    deck.press(7);
+    expect(restarts).toEqual(['restart']);
+    expect(actions).toEqual([]);
+
+    c.setDesktopRecovery('restarting');
+    deck.press(7);
+    expect(restarts).toEqual(['restart']);
+
+    c.setDesktopRecovery(null);
+    expect(c.status().desktopRecovery).toBeNull();
+    expect(deck.fills.size).toBeGreaterThan(1);
+    c.close();
+  });
+
   it('does not auto-sleep while a turn is active', () => {
     vi.useFakeTimers();
     const deck = new FakeDeck();

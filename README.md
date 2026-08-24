@@ -124,8 +124,10 @@ makes Desktop inherit the shared App Server endpoint.
 
 At login, Stream Deck Micro waits until Desktop is connected to that shared
 endpoint before restoring or attaching any session. If Desktop wins the startup
-race with a private server, the Control Room asks for a full Desktop restart and
-keeps the saved bindings untouched; reloading the Desktop window is not enough.
+race with a private server, Micro keeps the saved bindings untouched and replaces
+the deck with one central **RESTART CODEX** key. Pressing it gracefully quits and
+reopens Desktop, then restores the saved session buttons after shared control
+reconnects. The same recovery action appears in Control Room's Live mode.
 
 The installer:
 
@@ -353,8 +355,8 @@ machine.
 - The Elgato application must be closed only while the Independent edition owns
   the device.
 - Codex Desktop must be fully restarted after shared mode is installed or
-  removed. Micro also detects a private-server startup race, leaves session
-  writers untouched, and explains the required restart in the Control Room.
+  removed. Micro detects private-server startup races, leaves session writers
+  untouched, and offers a one-key graceful Desktop restart.
 - There is no approval, voice, reasoning-effort, or new-chat key in v1.
 - Codex App Server does not currently expose Desktop's unread state. Shared mode
   therefore mirrors Codex Desktop's read-only persisted notification-dot state
