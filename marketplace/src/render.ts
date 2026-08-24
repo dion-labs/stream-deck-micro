@@ -25,6 +25,18 @@ export function renderKey(
       ? tile('#571B23', '#DC2626', 'SWITCH', 'MODE', false, true)
       : blank('#0B0708');
   }
+  if (status.deck.desktopRecovery) {
+    if (keyIndex !== 7) return blank('#000000');
+    const restarting = status.deck.desktopRecovery === 'restarting';
+    return tile(
+      restarting ? '#293142' : '#6A3B0A',
+      restarting ? '#4A5A73' : '#B46C14',
+      restarting ? 'OPENING' : 'RESTART',
+      'CODEX',
+      false,
+      !restarting,
+    );
+  }
   if (status.deck.mode === 'asleep') return blank('#000000');
 
   const mapping = status.deck.layout.find((entry) => entry.keyIndex === keyIndex)?.action;

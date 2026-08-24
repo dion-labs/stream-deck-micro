@@ -25,3 +25,4 @@ Versioning once it reaches 1.0.
 - Detect Codex title changes automatically and provide a manual recovery refresh.
 - Keep the Marketplace surface polling across local bridge restarts.
 - Clear shared-session attention when its notification dot is cleared in Codex Desktop.
+- Detect private-server login races and offer one-key Codex Desktop recovery.

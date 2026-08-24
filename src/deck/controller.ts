@@ -22,10 +22,13 @@ export interface DeckEvents {
   attention: () => void;
   /** Awake/attention/asleep presentation mode changed. */
   mode: (mode: DeckMode) => void;
+  /** The user explicitly requested a graceful Codex Desktop restart. */
+  restartCodex: () => void;
 }
 
 export type DeckMode = 'awake' | 'attention' | 'asleep';
 export type AttentionState = 'done' | 'error';
+export type DesktopRecoveryState = 'restart-required' | 'restarting';
 
 export interface DeckStatus {
   mode: DeckMode;
@@ -33,6 +36,7 @@ export interface DeckStatus {
   layout: { keyIndex: number; action: KeyAction }[];
   attention: { index: number; state: AttentionState; sessionId: string | null }[];
   autoSleepDueAt: number | null;
+  desktopRecovery: DesktopRecoveryState | null;
 }
 
 export interface DeckDriver {
@@ -49,6 +53,7 @@ export interface DeckDriver {
 }
 
 const PULSE_INTERVAL_MS = 450;
+const RECOVERY_KEY_INDEX = 7;
 
 /**
  * Owns the physical Stream Deck: renders slots/actions onto keys, runs the
@@ -69,6 +74,7 @@ export class DeckController {
   private pulseTimer: NodeJS.Timeout | null = null;
   private sleepTimer: NodeJS.Timeout | null = null;
   private autoSleepDueAt: number | null = null;
+  private desktopRecovery: DesktopRecoveryState | null = null;
 
   constructor(
     device: DeckDriver,
@@ -113,12 +119,12 @@ export class DeckController {
   setWorkflows(workflows: WorkflowKey[]): void {
     this.workflows.length = 0;
     this.workflows.push(...workflows);
-    if (this.mode === 'awake') this.repaintAll();
+    if (this.mode === 'awake' && !this.desktopRecovery) this.repaintAll();
   }
 
   setLayout(layout: DeckLayoutEntry[]): void {
     this.layout = cloneLayout(layout);
-    if (this.mode === 'awake') this.repaintAll();
+    if (this.mode === 'awake' && !this.desktopRecovery) this.repaintAll();
   }
 
   setSettings(settings: DeckSettings): void {
@@ -126,7 +132,7 @@ export class DeckController {
     if (this.mode !== 'asleep') this.device.setBrightness(this.settings.brightness);
     if (!this.settings.autoSleep.enabled && this.mode === 'attention') this.wake();
     else this.resetAutoSleepTimer();
-    if (this.mode === 'awake') this.drawStaticKeys();
+    if (this.mode === 'awake' && !this.desktopRecovery) this.drawStaticKeys();
   }
 
   status(): DeckStatus {
@@ -140,7 +146,25 @@ export class DeckController {
         sessionId: this.snapshots[index]?.sessionId ?? null,
       })),
       autoSleepDueAt: this.autoSleepDueAt,
+      desktopRecovery: this.desktopRecovery,
     };
+  }
+
+  /** Temporarily replace the normal surface with one central recovery action. */
+  setDesktopRecovery(state: DesktopRecoveryState | null): void {
+    if (state === this.desktopRecovery) return;
+    const previousMode = this.mode;
+    this.desktopRecovery = state;
+    this.clearSleepTimer();
+    this.stopPulse();
+    this.mode = 'awake';
+    this.device.setBrightness(this.settings.brightness);
+    this.repaintAll();
+    if (state === null) {
+      this.ensurePulse();
+      this.resetAutoSleepTimer();
+    }
+    if (previousMode !== this.mode) this.emitter.emit('mode', this.mode);
   }
 
   restoreAttention(entries: { sessionId: string; state: AttentionState }[]): void {
@@ -195,18 +219,18 @@ export class DeckController {
     const changed = previous !== undefined && slotChanged(previous, snapshot);
     if (changed) {
       if (this.mode !== 'awake') this.wake();
-      else {
+      else if (!this.desktopRecovery) {
         this.resetAutoSleepTimer();
         this.drawSlot(snapshot);
       }
-    } else if (this.mode === 'awake') this.drawSlot(snapshot);
+    } else if (this.mode === 'awake' && !this.desktopRecovery) this.drawSlot(snapshot);
     this.ensurePulse();
   }
 
   updateSelection(selectedIndex: number): void {
     const previous = this.selectedIndex;
     this.selectedIndex = selectedIndex;
-    if (this.mode === 'awake') {
+    if (this.mode === 'awake' && !this.desktopRecovery) {
       if (this.snapshots[previous]) this.drawSlot(this.snapshots[previous]);
       if (this.snapshots[selectedIndex]) this.drawSlot(this.snapshots[selectedIndex]);
     }
@@ -225,7 +249,7 @@ export class DeckController {
   }
 
   sleep(): void {
-    if (this.mode === 'asleep') return;
+    if (this.mode === 'asleep' || this.desktopRecovery) return;
     this.clearSleepTimer();
     this.stopPulse();
     this.mode = 'asleep';
@@ -244,6 +268,7 @@ export class DeckController {
   }
 
   private drawSlot(snapshot: AgentSlotSnapshot): void {
+    if (this.desktopRecovery) return;
     const key = [...this.actions()].find(([, action]) =>
       action.kind === 'slot' && action.index === snapshot.index)?.[0];
     if (key === undefined) return;
@@ -289,6 +314,10 @@ export class DeckController {
 
   /** Pulse animate thinking/running slots; stop the timer when none remain. */
   private ensurePulse(): void {
+    if (this.desktopRecovery) {
+      this.stopPulse();
+      return;
+    }
     if (this.mode === 'asleep') {
       this.stopPulse();
       return;
@@ -315,6 +344,12 @@ export class DeckController {
   }
 
   private onDown(keyIndex: number): void {
+    if (this.desktopRecovery) {
+      if (keyIndex === RECOVERY_KEY_INDEX && this.desktopRecovery === 'restart-required') {
+        this.emitter.emit('restartCodex');
+      }
+      return;
+    }
     const action = this.actions().get(keyIndex);
     if (this.mode === 'asleep') {
       this.wake();
@@ -335,6 +370,19 @@ export class DeckController {
 
   private repaintAll(): void {
     this.device.clearAllKeys();
+    if (this.desktopRecovery) {
+      const restarting = this.desktopRecovery === 'restarting';
+      this.device.fillImage(
+        RECOVERY_KEY_INDEX,
+        renderActionKey(
+          restarting ? 'OPENING' : 'RESTART',
+          restarting ? [62, 74, 96] : [180, 108, 20],
+          'CODEX',
+        ),
+        { format: 'rgba' },
+      );
+      return;
+    }
     for (const snapshot of this.snapshots) this.drawSlot(snapshot);
     this.drawStaticKeys();
   }
@@ -346,6 +394,8 @@ export class DeckController {
   private resetAutoSleepTimer(): void {
     this.clearSleepTimer();
     if (
+      this.desktopRecovery
+      ||
       this.mode !== 'awake'
       || !this.settings.autoSleep.enabled
       || this.snapshots.some((snapshot) => snapshot.state === 'thinking' || snapshot.state === 'running')

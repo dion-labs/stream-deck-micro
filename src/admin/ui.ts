@@ -93,6 +93,8 @@ export const ADMIN_HTML: string = `<!doctype html>
   .cap.act.sel { background: #475569; }
   .cap.act.sleep { background: #2d3748; }
   .cap.act.doit { background: #167046; }
+  .cap.act.restart { background: #b46c14; }
+  .cap.act.restarting { background: #3e4a60; }
   .key.attention .cap { animation: attentionPulse 900ms ease-in-out infinite; }
   .deck.mode-asleep .cap, .deck.mode-attention .key:not(.attention) .cap {
     background: #030403 !important; color: transparent; animation: none !important;
@@ -612,6 +614,27 @@ function renderDeck(status) {
   deck.innerHTML = '';
   var visualMode = controlMode === 'configure' ? 'awake' : ((status.deck && status.deck.mode) || 'awake');
   deck.className = 'deck mode-' + visualMode + (controlMode === 'configure' ? ' configuring' : ' live-control');
+  var recovery = controlMode !== 'configure' && status.deck && status.deck.desktopRecovery;
+  if (recovery) {
+    for (var recoveryKey = 0; recoveryKey < 15; recoveryKey++) {
+      if (recoveryKey !== 7) {
+        deck.appendChild(keyEl('', '', null, 'waiting for Codex Desktop').root);
+        continue;
+      }
+      var restarting = recovery === 'restarting';
+      var recoveryVisual = keyEl(
+        '<span class="t">' + (restarting ? 'OPENING' : 'RESTART') + '</span><span class="sub">Codex</span>',
+        'act ' + (restarting ? 'restarting' : 'restart'),
+        restarting ? null : function() {
+          return api('desktop/restart', {}).then(function() { toast('restarting Codex Desktop'); });
+        },
+        restarting ? 'Codex Desktop is reopening' : 'restart Codex Desktop on the shared server'
+      );
+      deck.appendChild(recoveryVisual.root);
+    }
+    renderKeyInspector();
+    return;
+  }
   var slots = status.slots;
   var attention = {};
   if (status.deck) status.deck.attention.forEach(function(a) { attention[a.index] = a.state; });

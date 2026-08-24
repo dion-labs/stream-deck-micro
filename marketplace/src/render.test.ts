@@ -25,6 +25,7 @@ const status: DaemonStatus = {
       { keyIndex: 14, action: { kind: 'workflow', id: 'do-it' } },
     ],
     attention: [],
+    desktopRecovery: null,
   },
 };
 
@@ -75,5 +76,21 @@ describe('Marketplace key rendering', () => {
     };
     expect(renderKey(attention, 0, true)).toContain('ATTENTION');
     expect(renderKey(attention, 14, true)).not.toContain('DO IT');
+  });
+
+  it('replaces the surface with one central Codex recovery key', () => {
+    const recovery = {
+      ...status,
+      deck: { ...status.deck, desktopRecovery: 'restart-required' as const },
+    };
+    expect(renderKey(recovery, 7, false)).toContain('RESTART');
+    expect(renderKey(recovery, 7, false)).toContain('CODEX');
+    expect(renderKey(recovery, 0, false)).not.toContain('RESTART');
+
+    const restarting = {
+      ...status,
+      deck: { ...status.deck, desktopRecovery: 'restarting' as const },
+    };
+    expect(renderKey(restarting, 7, false)).toContain('OPENING');
   });
 });

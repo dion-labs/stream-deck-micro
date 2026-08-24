@@ -25,6 +25,11 @@ position can host one of up to fifteen distinct session slots. This
 keeps the bundled profile editable without storing fifteen divergent action
 configurations.
 
+When Codex Desktop starts before the shared server, the surface temporarily
+blacks out every key except a central **RESTART CODEX** action. Pressing it asks
+Desktop to quit and reopen on the shared server; the normal profile returns once
+the saved sessions have restored.
+
 ## Release
 
 ```bash
