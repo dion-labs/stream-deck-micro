@@ -246,7 +246,7 @@ onto the deck.
 | Working | Blue pulse | Codex is running tools or changing files |
 | Complete | Green flash | The latest turn completed |
 | Error | Red flash | The latest turn failed or stopped |
-| Attention | Green/red pulse | A finished turn has not been acknowledged |
+| Attention | Signal-yellow beacon | A finished turn has not been acknowledged; the label preserves done/error |
 
 ### Sleep and attention
 

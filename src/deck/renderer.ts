@@ -1,6 +1,6 @@
 import { createCanvas } from '@napi-rs/canvas';
 import type { AgentSlotSnapshot } from '../core/types.js';
-import { stateColor } from './layout.js';
+import { ATTENTION_COLORS, attentionColor, stateColor } from './layout.js';
 
 /**
  * Renders one key icon to a raw RGBA buffer (elgato-stream-deck handles the
@@ -15,19 +15,23 @@ export function renderSlotKey(
 ): Buffer {
   const canvas = createCanvas(iconSize, iconSize);
   const ctx = canvas.getContext('2d');
-  const base = stateColor(attentionState ?? snapshot.state, pulsePhase);
-  const [r, g, b] = attentionState && !pulsePhase
-    ? base.map((value) => Math.round(value * 0.58)) as [number, number, number]
-    : base;
+  const [r, g, b] = attentionState
+    ? attentionColor(pulsePhase)
+    : stateColor(snapshot.state, pulsePhase);
+  const brightAttention = Boolean(attentionState && pulsePhase);
+  const textColor = brightAttention
+    ? `rgb(${ATTENTION_COLORS.ink.join(',')})`
+    : '#ffffff';
   ctx.fillStyle = `rgb(${r},${g},${b})`;
   ctx.fillRect(0, 0, iconSize, iconSize);
 
   // state caption
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.font = 'bold 11px sans-serif';
+  ctx.fillStyle = textColor;
+  ctx.globalAlpha = 0.85;
+  ctx.font = `bold ${attentionState ? 9 : 11}px sans-serif`;
   ctx.textAlign = 'center';
   const caption = attentionState
-    ? 'ATTENTION'
+    ? `${attentionState.toUpperCase()} · OPEN`
     : snapshot.detail === 'session attached'
       ? 'ATTACHED'
     : snapshot.state === 'empty'
@@ -42,16 +46,19 @@ export function renderSlotKey(
               ? 'ERROR'
               : 'idle';
   ctx.fillText(caption, iconSize / 2, iconSize - 7);
+  ctx.globalAlpha = 1;
 
   // slot number, always visible
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.fillStyle = textColor;
+  ctx.globalAlpha = 0.6;
   ctx.font = 'bold 10px sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText(String(snapshot.index + 1), 5, 13);
+  ctx.globalAlpha = 1;
 
   // label (first-prompt / thread name), up to two lines
   if (snapshot.state !== 'empty' && snapshot.label) {
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = textColor;
     ctx.font = 'bold 11px sans-serif';
     ctx.textAlign = 'center';
     const lines = wrap(snapshot.label, 12, 2);
@@ -61,7 +68,7 @@ export function renderSlotKey(
   }
 
   if (selected) {
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = brightAttention ? `rgb(${ATTENTION_COLORS.ink.join(',')})` : '#ffffff';
     ctx.lineWidth = 3;
     ctx.strokeRect(1.5, 1.5, iconSize - 3, iconSize - 3);
   }

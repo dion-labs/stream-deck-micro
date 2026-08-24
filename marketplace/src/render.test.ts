@@ -74,7 +74,11 @@ describe('Marketplace key rendering', () => {
         attention: [{ index: 0, state: 'done' as const, sessionId: 's0' }],
       },
     };
-    expect(renderKey(attention, 0, true)).toContain('ATTENTION');
+    expect(renderKey(attention, 0, true)).toContain('#FFD84A');
+    expect(renderKey(attention, 0, true)).toContain('#16130A');
+    expect(renderKey(attention, 0, true)).toContain('DONE · OPEN');
+    expect(renderKey(attention, 0, true)).not.toContain('#16A34A');
+    expect(renderKey(attention, 0, false)).toContain('#5A4708');
     expect(renderKey(attention, 14, true)).not.toContain('DO IT');
   });
 

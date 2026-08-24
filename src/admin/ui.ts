@@ -14,6 +14,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     --ok: #22a34a; --err: #dc2626;
     --purple: #7c3aed; --purple-dim: #452394; --blue: #2563eb; --blue-dim: #16337f;
     --grey: #3a3f44; --empty: #202026; --green: #16a34a; --red: #dc2626;
+    --attention: #ffd84a; --attention-dim: #5a4708; --attention-ink: #16130a;
     --radius: 14px;
   }
   * { box-sizing: border-box; }
@@ -95,12 +96,16 @@ export const ADMIN_HTML: string = `<!doctype html>
   .cap.act.doit { background: #167046; }
   .cap.act.restart { background: #b46c14; }
   .cap.act.restarting { background: #3e4a60; }
-  .key.attention .cap { animation: attentionPulse 900ms ease-in-out infinite; }
+  .key.attention .cap { animation: attentionPulse 1300ms ease-in-out infinite; }
+  .key.attention .cap .sub, .key.attention .cap .corner { color: inherit; opacity: .76; }
   .deck.mode-asleep .cap, .deck.mode-attention .key:not(.attention) .cap {
     background: #030403 !important; color: transparent; animation: none !important;
     box-shadow: inset 0 1px rgba(255,255,255,.015);
   }
-  @keyframes attentionPulse { 0%,100% { filter: brightness(.58); } 50% { filter: brightness(1.15); } }
+  @keyframes attentionPulse {
+    0%, 30%, 100% { background: var(--attention-dim); color: #fff; }
+    52%, 76% { background: var(--attention); color: var(--attention-ink); box-shadow: 0 0 24px rgba(255,216,74,.34); }
+  }
 
   @keyframes pulseThinking { 0%,100% { background: var(--purple-dim); } 50% { background: var(--purple); } }
   @keyframes pulseRunning { 0%,100% { background: var(--blue-dim); } 50% { background: var(--blue); } }
@@ -197,7 +202,7 @@ export const ADMIN_HTML: string = `<!doctype html>
   .device-state .orb { width: 38px; height: 38px; border-radius: 12px; background: var(--accent);
                       box-shadow: 0 0 22px rgba(200,255,99,.2); }
   .device-state .orb.asleep { background: #30342e; box-shadow: none; }
-  .device-state .orb.attention { background: var(--green); box-shadow: 0 0 22px rgba(50,168,92,.3); }
+  .device-state .orb.attention { background: var(--attention); box-shadow: 0 0 22px rgba(255,216,74,.34); }
   .device-state strong { display:block; text-transform: capitalize; }
   .device-state span { color: var(--faint); font-size: 11.5px; }
   .settings-grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -227,6 +232,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     --ok: #65dc84; --err: #ff6666;
     --purple: #9d72ff; --purple-dim: #553b94; --blue: #4f8cff; --blue-dim: #284d91;
     --grey: #454b43; --empty: #1b1e1a; --green: #32a85c; --red: #c83e3e;
+    --attention: #ffd84a; --attention-dim: #5a4708; --attention-ink: #16130a;
     --radius: 20px;
   }
   body {
@@ -430,6 +436,7 @@ export const ADMIN_HTML: string = `<!doctype html>
       <span><span class="sw" style="background:var(--blue)"></span>working</span>
       <span><span class="sw" style="background:var(--green)"></span>done</span>
       <span><span class="sw" style="background:var(--red)"></span>error</span>
+      <span><span class="sw" style="background:var(--attention)"></span>attention</span>
       <span class="deck-note" id="deckNote"><b>Configure</b> — click to inspect · drag to reorder</span>
     </div>
     <div class="activity"><div class="activity-head"><span>Live activity</span><span>Newest first</span></div><div class="feed" id="feed"></div></div>
@@ -867,7 +874,7 @@ function mkSlotKey(s, i, onclick, attentionState) {
   var html = s.state === 'empty'
     ? '<span class="corner">' + (i+1) + '</span><span class="sub">empty</span>'
     : '<span class="corner">' + (i+1) + '</span>' + twoLines(s.label) +
-      '<span class="sub">' + (attentionState ? 'attention' : s.detail === 'session attached' ? 'attached' : CAPTIONS[s.state]) + '</span>';
+      '<span class="sub">' + (attentionState ? attentionState + ' · open' : s.detail === 'session attached' ? 'attached' : CAPTIONS[s.state]) + '</span>';
   var visualState = attentionState || s.state;
   var el = keyEl(html, 'st-' + visualState + pulse, onclick,
     s.state === 'empty' ? 'empty slot' : (s.label + ' — ' + s.state + (s.detail ? ' · ' + s.detail : '')));
