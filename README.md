@@ -223,7 +223,8 @@ every prompt and use a narrower sandbox if this does not match your threat model
 └─────┴─────┴─────┴─────┴─────┘
 ```
 
-- **AG1–AG7** select the target session. Empty slots are inert.
+- **AG1–AG7** select the target session, bring Codex Desktop forward, and open
+  that thread. Empty slots are inert; the first press while asleep only wakes.
 - **DO IT** sends `lets do it` to the selected session.
 - **STOP** interrupts the selected turn.
 - Any key can become a distinct session button, up to all fifteen positions.

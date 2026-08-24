@@ -735,7 +735,7 @@ function executeAction(action, status) {
   if (action.kind === 'slot') {
     var slot = status.slots[action.index];
     if (!slot || slot.state === 'empty') { toast('slot ' + (action.index + 1) + ' is empty — attach a session first'); return null; }
-    return api('select', { index: action.index });
+    return api('desktop/open', { index: action.index });
   }
   if (action.kind === 'stop') return api('stop', {}).then(function() { toast('interrupt sent'); });
   if (action.kind === 'attach') return api('attach', {}).then(function(r) { toast('attached “' + (r.name || '?') + '” → slot ' + (r.index+1) + ' (' + r.mode + ')'); });
