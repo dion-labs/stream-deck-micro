@@ -94,6 +94,17 @@ export function stateColor(state: AgentState, pulsePhase = 0): [number, number, 
   }
 }
 
+/** Dedicated beacon palette for turns waiting to be acknowledged. */
+export const ATTENTION_COLORS = {
+  dim: [90, 71, 8] as [number, number, number],
+  bright: [255, 216, 74] as [number, number, number],
+  ink: [22, 19, 10] as [number, number, number],
+};
+
+export function attentionColor(pulsePhase = 0): [number, number, number] {
+  return pulsePhase ? ATTENTION_COLORS.bright : ATTENTION_COLORS.dim;
+}
+
 export const ACTION_KEYS_STYLE: Record<'stop' | 'sleep' | 'attach', { title: string; color: [number, number, number] }> = {
   stop: { title: 'STOP', color: [220, 38, 38] },
   sleep: { title: 'SLEEP', color: [45, 55, 72] },

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DeckController, type DeckDriver } from './controller.js';
 import type { AgentSlotSnapshot } from '../core/types.js';
-import { SLOT_KEYS, layoutActions, stateColor } from './layout.js';
+import { ATTENTION_COLORS, SLOT_KEYS, attentionColor, layoutActions, stateColor } from './layout.js';
 import { renderActionKey, renderSlotKey } from './renderer.js';
 
 class FakeDeck implements DeckDriver {
@@ -136,6 +136,13 @@ describe('layout', () => {
     expect(think).not.toEqual(thinkDim);
     expect(idle).not.toEqual(think);
   });
+
+  it('uses a dedicated yellow attention beacon instead of result colors', () => {
+    expect(attentionColor(0)).toEqual(ATTENTION_COLORS.dim);
+    expect(attentionColor(1)).toEqual(ATTENTION_COLORS.bright);
+    expect(attentionColor(1)).not.toEqual(stateColor('done'));
+    expect(attentionColor(1)).not.toEqual(stateColor('error'));
+  });
 });
 
 describe('renderer', () => {
@@ -148,6 +155,14 @@ describe('renderer', () => {
     const idle = slot(0, 'idle');
     const attached = { ...idle, detail: 'session attached' };
     expect(renderSlotKey(attached, true)).not.toEqual(renderSlotKey(idle, true));
+  });
+
+  it('renders done and error attention with the same dedicated beacon background', () => {
+    const done = renderSlotKey(slot(0, 'done'), false, 72, 1, 'done');
+    const error = renderSlotKey(slot(0, 'error'), false, 72, 1, 'error');
+    expect([...done.subarray(0, 3)]).toEqual(ATTENTION_COLORS.bright);
+    expect([...error.subarray(0, 3)]).toEqual(ATTENTION_COLORS.bright);
+    expect(done).not.toEqual(error);
   });
 
   it('action key buffers are valid too', () => {

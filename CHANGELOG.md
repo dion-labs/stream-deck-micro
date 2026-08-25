@@ -27,3 +27,4 @@ Versioning once it reaches 1.0.
 - Clear shared-session attention when its notification dot is cleared in Codex Desktop.
 - Detect private-server login races and offer one-key Codex Desktop recovery.
 - Open the matching Codex Desktop thread when a session key is pressed.
+- Make unacknowledged turns unmistakable with a dedicated signal-yellow attention beacon.

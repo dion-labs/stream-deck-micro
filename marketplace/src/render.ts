@@ -9,6 +9,9 @@ const STATE_COLORS = {
   error: ['#8B1720', '#DC2626'],
 } as const;
 
+const ATTENTION_COLORS = ['#5A4708', '#FFD84A'] as const;
+const ATTENTION_INK = '#16130A';
+
 export function renderKey(
   status: DaemonStatus | null,
   keyIndex: number,
@@ -65,17 +68,26 @@ function renderAction(
   if (action.kind === 'slot') {
     const slot = status.slots[action.index];
     if (!slot) return blank('#090A0D');
-    const attention = status.deck.attention.some((entry) => entry.index === action.index);
-    const colors = STATE_COLORS[slot.state];
-    const lively = slot.state === 'thinking' || slot.state === 'running' || attention;
+    const attention = status.deck.attention.find((entry) => entry.index === action.index);
+    const colors = attention ? ATTENTION_COLORS : STATE_COLORS[slot.state];
+    const lively = slot.state === 'thinking' || slot.state === 'running' || Boolean(attention);
     const end = lively && !pulse ? colors[0] : colors[1];
     const title = slot.state === 'empty' ? `AG${action.index + 1}` : compact(slot.label, 12);
     const footer = attention
-      ? 'ATTENTION'
+      ? `${attention.state} · open`
       : slot.detail === 'session attached'
         ? 'ATTACHED'
         : stateLabel(slot.state);
-    return tile(colors[0], end, title, footer, action.index === status.selectedIndex, attention);
+    const foreground = attention && pulse ? ATTENTION_INK : '#FFF';
+    return tile(
+      colors[0],
+      end,
+      title,
+      footer,
+      action.index === status.selectedIndex,
+      Boolean(attention),
+      foreground,
+    );
   }
 
   if (action.kind === 'stop') return tile('#67151C', '#DC2626', 'STOP', 'TURN');
@@ -109,10 +121,13 @@ function tile(
   footer: string,
   selected = false,
   attention = false,
+  foreground = '#FFF',
 ): string {
   const [line1, line2] = splitTitle(title);
   const titleY = line2 ? 61 : 70;
-  const border = selected ? '#F6F4FF' : attention ? '#D8FFE5' : 'rgba(255,255,255,.13)';
+  const border = selected
+    ? attention ? foreground : '#F6F4FF'
+    : attention ? foreground : 'rgba(255,255,255,.13)';
   const borderWidth = selected ? 5 : attention ? 4 : 2;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="144" height="144" viewBox="0 0 144 144">
   <defs>
@@ -126,10 +141,10 @@ function tile(
   <rect width="144" height="144" rx="24" fill="#07080B"/>
   <rect x="5" y="5" width="134" height="134" rx="21" fill="url(#g)" stroke="${border}" stroke-width="${borderWidth}"/>
   <rect x="5" y="5" width="134" height="134" rx="21" fill="url(#l)"/>
-  <circle cx="21" cy="22" r="3" fill="white" fill-opacity=".54"/>
-  <text x="72" y="${titleY}" text-anchor="middle" fill="#FFF" font-family="-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif" font-size="${line2 ? 22 : 25}" font-weight="760" letter-spacing=".6">${escapeXml(line1)}</text>
-  ${line2 ? `<text x="72" y="87" text-anchor="middle" fill="#FFF" font-family="-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif" font-size="22" font-weight="760" letter-spacing=".6">${escapeXml(line2)}</text>` : ''}
-  <text x="72" y="119" text-anchor="middle" fill="#FFF" fill-opacity=".7" font-family="-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif" font-size="10" font-weight="700" letter-spacing="1.5">${escapeXml(footer.toUpperCase())}</text>
+  <circle cx="21" cy="22" r="3" fill="${foreground}" fill-opacity=".54"/>
+  <text x="72" y="${titleY}" text-anchor="middle" fill="${foreground}" font-family="-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif" font-size="${line2 ? 22 : 25}" font-weight="760" letter-spacing=".6">${escapeXml(line1)}</text>
+  ${line2 ? `<text x="72" y="87" text-anchor="middle" fill="${foreground}" font-family="-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif" font-size="22" font-weight="760" letter-spacing=".6">${escapeXml(line2)}</text>` : ''}
+  <text x="72" y="119" text-anchor="middle" fill="${foreground}" fill-opacity=".76" font-family="-apple-system,BlinkMacSystemFont,Inter,Arial,sans-serif" font-size="10" font-weight="700" letter-spacing="1.3">${escapeXml(footer.toUpperCase())}</text>
 </svg>`;
 }
 
