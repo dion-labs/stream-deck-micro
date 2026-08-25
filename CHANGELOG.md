@@ -26,3 +26,4 @@ Versioning once it reaches 1.0.
 - Keep the Marketplace surface polling across local bridge restarts.
 - Clear shared-session attention when its notification dot is cleared in Codex Desktop.
 - Detect private-server login races and offer one-key Codex Desktop recovery.
+- Open the matching Codex Desktop thread when a session key is pressed.

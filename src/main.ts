@@ -16,6 +16,7 @@ import {
 } from './config.js';
 import { SlotManager } from './core/slotManager.js';
 import type { AgentSession, AgentSlotSnapshot } from './core/types.js';
+import { openCodexThread } from './codexDesktop.js';
 import {
   AppServerAdapter,
   WriterHeldError,
@@ -187,6 +188,19 @@ export async function runDaemon(
     if (!stateHydrated) throw new Error('Shared control is connected; session bindings are still restoring.');
   }
 
+  function openSlotInCodex(index: number): { selectedIndex: number; sessionId: string } {
+    const snapshot = manager.snapshot(index);
+    if (snapshot.state === 'empty' || !snapshot.sessionId) {
+      throw new Error(`slot ${index + 1} is empty`);
+    }
+    manager.select(index);
+    deck.acknowledge(index);
+    void openCodexThread(snapshot.sessionId).catch((error) => {
+      log(`slot ${index + 1}: could not open Codex Desktop:`, String(error));
+    });
+    return { selectedIndex: index, sessionId: snapshot.sessionId };
+  }
+
   /** Notify when a slot transitions into done/error (turn finished). */
   const prevStates = new Map<number, string>();
   function maybeNotify(snapshot: AgentSlotSnapshot): void {
@@ -226,7 +240,7 @@ export async function runDaemon(
     switch (action.kind) {
       case 'slot':
         // empty slots are inert: sessions are created elsewhere and pulled in via ATTACH
-        if (manager.snapshot(action.index).state !== 'empty') manager.select(action.index);
+        if (manager.snapshot(action.index).state !== 'empty') openSlotInCodex(action.index);
         break;
       case 'stop':
         manager.interrupt();
@@ -525,6 +539,13 @@ export async function runDaemon(
         manager.select(index);
         deck.acknowledge(index);
         return { selectedIndex: index };
+      }
+      case 'desktop.open': {
+        const index = Number(args.index);
+        if (!Number.isInteger(index) || index < 0 || index >= config.slots.count) {
+          throw new Error(`index must be 0..${config.slots.count - 1}`);
+        }
+        return openSlotInCodex(index);
       }
       case 'stop':
         manager.interrupt();
