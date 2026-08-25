@@ -22,6 +22,7 @@ import {
   WriterHeldError,
   type MonitoredThread,
 } from './harness/codex-app-server/adapter.js';
+import { CodexDesktopFocusMonitor } from './harness/codex-app-server/focus.js';
 import {
   CodexUnreadAttentionSync,
   CodexUnreadMonitor,
@@ -175,6 +176,8 @@ export async function runDaemon(
   let desktopRestartPromise: Promise<void> | null = null;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
   const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
+  const desktopFocusMonitor = sharedEndpoint ? new CodexDesktopFocusMonitor() : null;
+  let desktopFocusedThreadId: string | null = null;
 
   const persistState = () => {
     // Do not replace saved bindings with an empty startup snapshot while
@@ -186,6 +189,16 @@ export async function runDaemon(
     if (!sharedEndpoint) return;
     if (desktopConnection.state !== 'connected') throw new Error(desktopConnection.message);
     if (!stateHydrated) throw new Error('Shared control is connected; session bindings are still restoring.');
+  }
+
+  function syncDesktopFocus(): void {
+    if (!desktopFocusedThreadId || !stateHydrated || desktopConnection.state !== 'connected') return;
+    const focusedSlot = manager.snapshots().find(
+      (snapshot) => snapshot.sessionId === desktopFocusedThreadId,
+    );
+    if (!focusedSlot || focusedSlot.index === manager.selectedIndex) return;
+    manager.select(focusedSlot.index);
+    log(`slot ${focusedSlot.index + 1}: selected from Codex Desktop focus (${desktopFocusedThreadId})`);
   }
 
   function openSlotInCodex(index: number): { selectedIndex: number; sessionId: string } {
@@ -221,6 +234,7 @@ export async function runDaemon(
     deck.updateSlot(snapshot);
     maybeNotify(snapshot);
     persistState();
+    if (snapshot.sessionId === desktopFocusedThreadId) syncDesktopFocus();
   });
   manager.on('select', (index) => {
     deck.updateSelection(index);
@@ -338,6 +352,7 @@ export async function runDaemon(
     restoreError = null;
     if (persisted?.attention?.length) deck.restoreAttention(persisted.attention);
     deck.render(manager.snapshots(), manager.selectedIndex);
+    syncDesktopFocus();
     persistState();
     log('session bindings ready');
   }
@@ -466,6 +481,11 @@ export async function runDaemon(
         log(`slot ${index + 1}: attention acknowledged in Codex Desktop (${sessionId})`);
       }
     }
+  });
+
+  desktopFocusMonitor?.start((threadId) => {
+    desktopFocusedThreadId = threadId;
+    syncDesktopFocus();
   });
 
   /** Attach the newest (or a specific) unattached session; free slot unless slotIndex given. */
@@ -687,6 +707,7 @@ export async function runDaemon(
   const shutdown = () => {
     if (desktopPoll) clearInterval(desktopPoll);
     unreadMonitor?.close();
+    desktopFocusMonitor?.close();
     persistState();
     deck.close();
     if (existsSync(IPC_SOCKET)) unlinkSync(IPC_SOCKET);

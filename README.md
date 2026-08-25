@@ -225,6 +225,8 @@ every prompt and use a narrower sandbox if this does not match your threat model
 
 - **AG1–AG7** select the target session, bring Codex Desktop forward, and open
   that thread. Empty slots are inert; the first press while asleep only wakes.
+- Changing threads in Codex Desktop selects the matching assigned session on
+  the deck, keeping workflow and control keys pointed at the visible thread.
 - **DO IT** sends `lets do it` to the selected session.
 - **STOP** interrupts the selected turn.
 - Any key can become a distinct session button, up to all fifteen positions.
@@ -257,6 +259,10 @@ slots remain visible. Press an attention slot to acknowledge it and select that
 session. Starting a new turn in the session also acknowledges the previous result.
 In shared mode, clearing Codex Desktop's notification dot by viewing the thread
 also clears the matching deck attention state.
+
+Focused-session sync is best effort and reads Codex Desktop's local activity
+log. It only selects sessions already assigned to a key; unknown threads and
+unexpected log formats leave the current deck selection unchanged.
 
 When no slot needs attention, the timeout sleeps the surface. The Independent
 edition sets device brightness to zero; the Marketplace edition renders every
