@@ -309,7 +309,7 @@ export interface AppServerAdapterOptions {
 
 export class AppServerAdapter implements HarnessAdapter {
   readonly name = 'codex-app-server';
-  private readonly conn: AppServerConn;
+  private conn: AppServerConn;
   private readonly sessions = new Map<string, AppServerSession>();
   private readonly monitor: ExternalThreadMonitor;
   private initialized = false;
@@ -330,6 +330,10 @@ export class AppServerAdapter implements HarnessAdapter {
         return [];
       }
     });
+    this.bindNotifications();
+  }
+
+  private bindNotifications(): void {
     this.conn.onNotification((method, params) => {
       const record = (params ?? {}) as Record<string, unknown>;
       const threadId =
@@ -338,6 +342,14 @@ export class AppServerAdapter implements HarnessAdapter {
       if (!threadId) return;
       this.sessions.get(threadId)?.handleNotification(method, record);
     });
+  }
+
+  /** Rebuild transport after an explicit managed-server update; callers restore bindings afterwards. */
+  reconnect(conn?: AppServerConn): void {
+    this.dispose();
+    this.conn = conn ?? spawnAppServerConn(this.options.endpoint);
+    this.initialized = false;
+    this.bindNotifications();
   }
 
   private async ensureInit(): Promise<void> {

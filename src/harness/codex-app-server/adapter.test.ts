@@ -55,6 +55,21 @@ async function eventsOf(session: { onEvent: (cb: (e: SessionEvent) => void) => (
 }
 
 describe('AppServerAdapter', () => {
+  it('reconnects to the updated backend and restores session notification routing', async () => {
+    const oldConnection = new FakeConn();
+    const adapter = adapterWith(oldConnection);
+    await adapter.createSession({ cwd: '/tmp/x' });
+    const nextConnection = new FakeConn();
+    nextConnection.respond('thread/resume', () => ({ thread: { id: 't-new' } }));
+    adapter.reconnect(nextConnection);
+    expect(oldConnection.closed).toBe(true);
+    const restored = await adapter.resumeSession('t-new', { cwd: '/tmp/x' });
+    const events = await eventsOf(restored);
+    nextConnection.push('turn/started', { threadId: 't-new' });
+    expect(events).toEqual([{ type: 'turn-started' }]);
+    expect(nextConnection.requests.map((request) => request.method)).toEqual(['initialize', 'thread/resume']);
+    adapter.dispose();
+  });
   it('initializes once and starts threads via thread/start', async () => {
     const conn = new FakeConn();
     const adapter = adapterWith(conn);

@@ -31,13 +31,15 @@ export function renderKey(
   if (status.deck.desktopRecovery) {
     if (keyIndex !== 7) return blank('#000000');
     const restarting = status.deck.desktopRecovery === 'restarting';
+    const updating = status.deck.desktopRecovery === 'updating';
+    const busy = restarting || updating;
     return tile(
-      restarting ? '#293142' : '#6A3B0A',
-      restarting ? '#4A5A73' : '#B46C14',
-      restarting ? 'OPENING' : 'RESTART',
+      busy ? '#293142' : '#6A3B0A',
+      busy ? '#4A5A73' : '#B46C14',
+      updating ? 'UPDATING' : restarting ? 'OPENING' : status.deck.desktopRecovery === 'update-required' ? 'UPDATE' : 'RESTART',
       'CODEX',
       false,
-      !restarting,
+      !busy,
     );
   }
   if (status.deck.mode === 'asleep') return blank('#000000');

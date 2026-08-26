@@ -629,13 +629,16 @@ function renderDeck(status) {
         continue;
       }
       var restarting = recovery === 'restarting';
+      var updating = recovery === 'updating';
+      var updateNeeded = recovery === 'update-required';
+      var busy = restarting || updating;
       var recoveryVisual = keyEl(
-        '<span class="t">' + (restarting ? 'OPENING' : 'RESTART') + '</span><span class="sub">Codex</span>',
-        'act ' + (restarting ? 'restarting' : 'restart'),
-        restarting ? null : function() {
-          return api('desktop/restart', {}).then(function() { toast('restarting Codex Desktop'); });
+        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : updateNeeded ? 'UPDATE' : 'RESTART') + '</span><span class="sub">Codex</span>',
+        'act ' + (busy ? 'restarting' : 'restart'),
+        busy ? null : function() {
+          return api('desktop/restart', {}).then(function() { toast('recovering shared Codex control'); });
         },
-        restarting ? 'Codex Desktop is reopening' : 'restart Codex Desktop on the shared server'
+        updating ? 'Updating the shared backend and restoring your sessions' : restarting ? 'Codex Desktop is reopening' : updateNeeded ? 'Restart the shared backend with the installed Codex version. Active turns may be interrupted.' : 'restart Codex Desktop on the shared server'
       );
       deck.appendChild(recoveryVisual.root);
     }
@@ -892,11 +895,21 @@ function pushFeed(line) {
 function renderDesktopConnection(status) {
   var desktop = status.desktop;
   var banner = $('desktopBanner');
-  if (!desktop || desktop.state === 'not-required' || (desktop.state === 'connected' && desktop.sessionsReady)) {
+  var updateNeeded = desktop && ((desktop.serverVersions && desktop.serverVersions.state === 'update-required') || desktop.serverUpdateError);
+  if (!desktop || desktop.state === 'not-required' || (desktop.state === 'connected' && desktop.sessionsReady && !updateNeeded && !desktop.serverUpdating)) {
     banner.hidden = true;
     return;
   }
   banner.hidden = false;
+  if (updateNeeded || desktop.serverUpdating) {
+    banner.classList.toggle('error', !desktop.serverUpdating);
+    $('desktopBannerTitle').textContent = desktop.serverUpdating ? 'Updating shared Codex backend' : 'Update shared Codex backend';
+    var versions = desktop.serverVersions || {};
+    $('desktopBannerMessage').textContent = desktop.serverUpdateError || (desktop.serverUpdating
+      ? 'Reopening Desktop and restoring your saved session buttons. Please wait.'
+      : 'Running ' + versions.runningVersion + '; installed ' + versions.bundledVersion + '. Press the central UPDATE CODEX key in Live mode or on the deck. This restarts the backend and may interrupt active turns; nothing is downloaded.');
+    return;
+  }
   banner.classList.toggle('error', desktop.state === 'restart-required' || Boolean(desktop.restoreError));
   var title = desktop.restoreError
     ? 'Session restore needs attention'

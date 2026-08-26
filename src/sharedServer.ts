@@ -22,7 +22,7 @@ const LAUNCH_AGENTS_DIR = join(homedir(), 'Library', 'LaunchAgents');
 const SERVER_PLIST = join(LAUNCH_AGENTS_DIR, `${SHARED_SERVER_LABEL}.plist`);
 const ENV_PLIST = join(LAUNCH_AGENTS_DIR, `${DESKTOP_ENV_LABEL}.plist`);
 const INSTALL_STATE = join(APP_DIR, 'shared-server.json');
-const DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
+export const DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
 const DESKTOP_APP = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
 
 export type DesktopConnectionState =
@@ -243,16 +243,48 @@ export function processListHasDesktopPrivateAppServer(processes: string): boolea
 export async function restartCodexDesktop(
   lifecycle: CodexDesktopLifecycle = macCodexDesktopLifecycle,
   pollAttempts = 40,
+  whileStopped?: () => Promise<void>,
 ): Promise<void> {
   await lifecycle.requestQuit();
   for (let attempt = 0; attempt < pollAttempts; attempt += 1) {
     if (!lifecycle.isRunning()) {
-      await lifecycle.open();
+      try {
+        await whileStopped?.();
+      } finally {
+        // Even a failed backend update should not leave Desktop closed.
+        await lifecycle.open();
+      }
       return;
     }
     if (attempt < pollAttempts - 1) await lifecycle.wait(250);
   }
   throw new Error('ChatGPT Desktop did not quit; close it manually and press RESTART CODEX again');
+}
+
+/** Never restart an arbitrary endpoint or a user-supplied Codex executable. */
+export function isManagedDesktopServer(endpoint: string): boolean {
+  const state = readInstallState();
+  if (state?.url !== endpoint || state.codexPath !== DESKTOP_CODEX) return false;
+  try {
+    const args = JSON.parse(execFileSync('/usr/bin/plutil', [
+      '-extract', 'ProgramArguments', 'json', '-o', '-', SERVER_PLIST,
+    ], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }));
+    return JSON.stringify(args) === JSON.stringify([
+      DESKTOP_CODEX, 'app-server', '--listen', endpoint,
+    ]);
+  } catch {
+    return false;
+  }
+}
+
+export async function restartManagedDesktopServer(endpoint: string): Promise<void> {
+  if (!isManagedDesktopServer(endpoint)) {
+    throw new Error('Automatic update is only available for the Desktop server installed by Micro');
+  }
+  await execFilePromise('/bin/launchctl', [
+    'kickstart', '-k', `${launchDomain()}/${SHARED_SERVER_LABEL}`,
+  ]);
+  await waitForHealth(endpoint);
 }
 
 function parseProcessList(processes: string): Map<number, { ppid: number; command: string }> {

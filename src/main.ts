@@ -17,11 +17,13 @@ import {
 import { SlotManager } from './core/slotManager.js';
 import type { AgentSession, AgentSlotSnapshot } from './core/types.js';
 import { openCodexThread } from './codexDesktop.js';
+import { SharedServerVersionMonitor } from './serverUpdate.js';
 import {
   AppServerAdapter,
   WriterHeldError,
   type MonitoredThread,
 } from './harness/codex-app-server/adapter.js';
+import { CodexDesktopFocusMonitor } from './harness/codex-app-server/focus.js';
 import {
   CodexUnreadAttentionSync,
   CodexUnreadMonitor,
@@ -34,6 +36,7 @@ import { macNotificationArgs } from './notifications.js';
 import {
   desktopConnectionStatus,
   restartCodexDesktop,
+  restartManagedDesktopServer,
   type DesktopConnectionStatus,
 } from './sharedServer.js';
 
@@ -160,8 +163,9 @@ export async function runDaemon(
 
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
-  const persisted = loadState();
+  let persisted = loadState();
   const sharedEndpoint = config.appServer.url;
+  const serverVersions = sharedEndpoint ? new SharedServerVersionMonitor(sharedEndpoint) : null;
   let desktopConnection: DesktopConnectionStatus = sharedEndpoint
     ? desktopConnectionStatus(sharedEndpoint)
     : {
@@ -173,8 +177,13 @@ export async function runDaemon(
   let restorePromise: Promise<void> | null = null;
   let restoreError: string | null = null;
   let desktopRestartPromise: Promise<void> | null = null;
+  let serverUpdating = false;
+  let serverUpdateError: string | null = null;
+  let desktopRefreshPromise: Promise<void> | null = null;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
   const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
+  const desktopFocusMonitor = sharedEndpoint ? new CodexDesktopFocusMonitor() : null;
+  let desktopFocusedThreadId: string | null = null;
 
   const persistState = () => {
     // Do not replace saved bindings with an empty startup snapshot while
@@ -184,8 +193,25 @@ export async function runDaemon(
 
   function assertDesktopReady(): void {
     if (!sharedEndpoint) return;
+    if (serverUpdating || needsServerUpdate()) {
+      throw new Error('Update the shared Codex backend using the central UPDATE CODEX button first. This may interrupt active turns.');
+    }
     if (desktopConnection.state !== 'connected') throw new Error(desktopConnection.message);
     if (!stateHydrated) throw new Error('Shared control is connected; session bindings are still restoring.');
+  }
+
+  function needsServerUpdate(): boolean {
+    return serverVersions?.status.state === 'update-required' || serverUpdateError !== null;
+  }
+
+  function syncDesktopFocus(): void {
+    if (!desktopFocusedThreadId || !stateHydrated || desktopConnection.state !== 'connected') return;
+    const focusedSlot = manager.snapshots().find(
+      (snapshot) => snapshot.sessionId === desktopFocusedThreadId,
+    );
+    if (!focusedSlot || focusedSlot.index === manager.selectedIndex) return;
+    manager.select(focusedSlot.index);
+    log(`slot ${focusedSlot.index + 1}: selected from Codex Desktop focus (${desktopFocusedThreadId})`);
   }
 
   function openSlotInCodex(index: number): { selectedIndex: number; sessionId: string } {
@@ -221,6 +247,7 @@ export async function runDaemon(
     deck.updateSlot(snapshot);
     maybeNotify(snapshot);
     persistState();
+    if (snapshot.sessionId === desktopFocusedThreadId) syncDesktopFocus();
   });
   manager.on('select', (index) => {
     deck.updateSelection(index);
@@ -304,6 +331,7 @@ export async function runDaemon(
             log(`slot ${slot.index + 1}: writer held elsewhere → monitor-only`);
           } else {
             log(`resume slot ${slot.index} failed:`, String(e));
+            if (serverUpdating) throw e;
             continue;
           }
         }
@@ -338,6 +366,7 @@ export async function runDaemon(
     restoreError = null;
     if (persisted?.attention?.length) deck.restoreAttention(persisted.attention);
     deck.render(manager.snapshots(), manager.selectedIndex);
+    syncDesktopFocus();
     persistState();
     log('session bindings ready');
   }
@@ -355,6 +384,15 @@ export async function runDaemon(
   }
 
   async function refreshDesktopConnection(): Promise<void> {
+    if (serverUpdating) return;
+    if (desktopRefreshPromise) return desktopRefreshPromise;
+    desktopRefreshPromise = refreshDesktopConnectionNow().finally(() => {
+      desktopRefreshPromise = null;
+    });
+    return desktopRefreshPromise;
+  }
+
+  async function refreshDesktopConnectionNow(): Promise<void> {
     if (!sharedEndpoint) {
       await ensureSessionsHydrated();
       return;
@@ -364,22 +402,28 @@ export async function runDaemon(
       log(`desktop shared control → ${next.state}`);
     }
     desktopConnection = next;
-    if (next.state === 'connected') await ensureSessionsHydrated();
+    await serverVersions?.refresh();
+    if (next.state === 'connected' && !needsServerUpdate()) await ensureSessionsHydrated();
     syncDesktopRecoverySurface();
   }
 
   function syncDesktopRecoverySurface(): void {
     deck.setDesktopRecovery(
-      desktopRestartPromise
-        ? 'restarting'
-        : desktopConnection.state === 'restart-required'
-          ? 'restart-required'
-          : null,
+      serverUpdating
+        ? 'updating'
+        : needsServerUpdate()
+          ? 'update-required'
+          : desktopRestartPromise
+            ? 'restarting'
+            : desktopConnection.state === 'restart-required'
+              ? 'restart-required'
+              : null,
     );
   }
 
   function beginDesktopRestart(): Promise<void> {
     if (desktopRestartPromise) return desktopRestartPromise;
+    if (needsServerUpdate()) return beginServerUpdate();
     if (!sharedEndpoint || desktopConnection.state !== 'restart-required') {
       return Promise.reject(new Error('Codex Desktop does not currently require a shared-mode restart'));
     }
@@ -407,6 +451,51 @@ export async function runDaemon(
       syncDesktopRecoverySurface();
     });
     syncDesktopRecoverySurface();
+    return desktopRestartPromise;
+  }
+
+  function beginServerUpdate(): Promise<void> {
+    if (desktopRestartPromise) return desktopRestartPromise;
+    if (!sharedEndpoint || !serverVersions || !needsServerUpdate()) {
+      return Promise.reject(new Error('The managed shared server does not need an update'));
+    }
+    // Snapshot the latest bindings, not just the configuration present at boot.
+    persistState();
+    persisted = loadState() ?? persisted;
+    stateHydrated = false;
+    restorePromise = null;
+    serverUpdating = true;
+    serverUpdateError = null;
+    syncDesktopRecoverySurface();
+    desktopRestartPromise = (async () => {
+      // Let any read-only status probe finish before replacing the backend.
+      await desktopRefreshPromise;
+      log('Shared Codex backend update requested; active turns may be interrupted');
+      await restartCodexDesktop(undefined, 40, async () => {
+        await restartManagedDesktopServer(sharedEndpoint);
+        appServer.reconnect();
+      });
+      const versions = await serverVersions.refresh(true);
+      if (versions.state !== 'current') throw new Error('The shared backend has not picked up the installed Codex version; press UPDATE CODEX to retry.');
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        desktopConnection = desktopConnectionStatus(sharedEndpoint);
+        if (desktopConnection.state === 'connected') {
+          await ensureSessionsHydrated();
+          log(`Shared Codex backend updated to ${versions.runningVersion}; session buttons restored`);
+          return;
+        }
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+      }
+      throw new Error('Codex Desktop did not reconnect after the backend update; press UPDATE CODEX to retry.');
+    })().catch((error) => {
+      serverUpdateError = error instanceof Error ? error.message : String(error);
+      log('Shared Codex backend update failed:', serverUpdateError);
+      throw error;
+    }).finally(() => {
+      serverUpdating = false;
+      desktopRestartPromise = null;
+      syncDesktopRecoverySurface();
+    });
     return desktopRestartPromise;
   }
 
@@ -468,6 +557,11 @@ export async function runDaemon(
     }
   });
 
+  desktopFocusMonitor?.start((threadId) => {
+    desktopFocusedThreadId = threadId;
+    syncDesktopFocus();
+  });
+
   /** Attach the newest (or a specific) unattached session; free slot unless slotIndex given. */
   async function attachNewest(
     wantedId?: string,
@@ -499,6 +593,9 @@ export async function runDaemon(
   }
 
   async function handleIpc(cmd: string, args: Record<string, unknown>): Promise<unknown> {
+    if (serverUpdating && !['status', 'desktop.restart', 'desktop.update', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
+      throw new Error('Codex is updating; wait until your session buttons return.');
+    }
     switch (cmd) {
       case 'status':
         return {
@@ -512,6 +609,9 @@ export async function runDaemon(
             ...desktopConnection,
             sessionsReady: stateHydrated,
             restoreError,
+            serverVersions: serverVersions?.status ?? null,
+            serverUpdating,
+            serverUpdateError,
           },
         };
       case 'send': {
@@ -548,6 +648,7 @@ export async function runDaemon(
         return openSlotInCodex(index);
       }
       case 'stop':
+        assertDesktopReady();
         manager.interrupt();
         return { stopped: true };
       case 'clear': {
@@ -667,6 +768,7 @@ export async function runDaemon(
       case 'deck.wake':
         deck.wake();
         return deck.status();
+      case 'desktop.update':
       case 'desktop.restart':
         void beginDesktopRestart().catch(() => {});
         return { accepted: true };
@@ -687,6 +789,7 @@ export async function runDaemon(
   const shutdown = () => {
     if (desktopPoll) clearInterval(desktopPoll);
     unreadMonitor?.close();
+    desktopFocusMonitor?.close();
     persistState();
     deck.close();
     if (existsSync(IPC_SOCKET)) unlinkSync(IPC_SOCKET);

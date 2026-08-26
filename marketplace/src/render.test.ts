@@ -97,4 +97,15 @@ describe('Marketplace key rendering', () => {
     };
     expect(renderKey(restarting, 7, false)).toContain('OPENING');
   });
+
+  it('renders update and updating labels only on the central recovery key', () => {
+    for (const state of ['update-required', 'updating'] as const) {
+      const recovery = { ...status, deck: { ...status.deck, desktopRecovery: state } };
+      expect(renderKey(recovery, 7, false)).toContain(state === 'updating' ? 'UPDATING' : 'UPDATE');
+      expect(renderKey(recovery, 7, false)).toContain('CODEX');
+      for (let key = 0; key < 15; key += 1) {
+        if (key !== 7) expect(renderKey(recovery, key, false)).not.toContain('<text');
+      }
+    }
+  });
 });
