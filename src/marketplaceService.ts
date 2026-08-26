@@ -12,7 +12,6 @@ import { join, resolve } from 'node:path';
 import { APP_DIR, IPC_SOCKET, saveSurfaceMode } from './config.js';
 import { ipcCall } from './ipc.js';
 import {
-  installSharedServer,
   launchAgentPlist,
   sharedServerStatus,
   type DesktopConnectionStatus,
@@ -42,8 +41,9 @@ export interface MarketplaceServiceStatus {
 export async function installMarketplaceService(
   configPath?: string,
 ): Promise<MarketplaceServiceStatus> {
-  const shared = await installSharedServer(configPath);
-  const savedConfigPath = resolve(saveSurfaceMode(shared.configPath ?? configPath, 'marketplace'));
+  // Installing/updating the Elgato bridge must not change Codex's backend.
+  const shared = await sharedServerStatus();
+  const savedConfigPath = resolve(saveSurfaceMode(configPath ?? shared.configPath ?? undefined, 'marketplace'));
   const cliPath = resolve(process.argv[1]);
   const state: MarketplaceInstallState = {
     configPath: savedConfigPath,

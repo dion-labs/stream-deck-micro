@@ -31,6 +31,7 @@
     "README.md",
     "LICENSE",
     "SECURITY.md",
+    "docs/shared-server-hardening.md",
     "config.example.json"
   ],
   "os": [
@@ -58,10 +59,12 @@
   "dependencies": {
     "@napi-rs/canvas": "^1.0.7",
     "elgato-stream-deck": "^4.3.0",
+    "ws": "^8.21.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.11"

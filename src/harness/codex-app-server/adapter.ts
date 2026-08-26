@@ -12,6 +12,7 @@ export type { MonitoredThread } from './monitor.js';
 
 /** The connection surface the adapter needs — faked in unit tests. */
 export interface AppServerConn {
+  readonly isClosed?: boolean;
   request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown>;
   onNotification(cb: (method: string, params: unknown) => void): () => void;
   notify?(method: string, params?: unknown): void;
@@ -23,6 +24,7 @@ export function spawnAppServerConn(endpoint?: string): AppServerConn {
     ? RpcConnection.webSocket(endpoint)
     : RpcConnection.spawn('codex', ['app-server']);
   return {
+    get isClosed() { return conn.isClosed; },
     request: (m, p, t) => conn.request(m, p, t),
     onNotification: (cb) => {
       conn.on('notification', cb);
@@ -313,6 +315,9 @@ export class AppServerAdapter implements HarnessAdapter {
   private readonly sessions = new Map<string, AppServerSession>();
   private readonly monitor: ExternalThreadMonitor;
   private initialized = false;
+
+  /** Transport failure is independent of the Desktop/backend process generation. */
+  get transportClosed(): boolean { return this.conn.isClosed === true; }
 
   constructor(
     private readonly options: AppServerAdapterOptions = {},

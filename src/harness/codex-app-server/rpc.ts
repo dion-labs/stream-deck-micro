@@ -1,6 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
+import WebSocket from 'ws';
+import { sharedConnectionHeaders } from '../../sharedRuntime.js';
 
 /**
  * Minimal JSON-RPC 2.0 client over a child process's stdio, speaking the codex
@@ -46,7 +48,10 @@ export class RpcConnection {
   /** Connect to an App Server WebSocket. Requests made while connecting are queued. */
   static webSocket(
     url: string,
-    factory: WebSocketFactory = (endpoint) => new WebSocket(endpoint),
+    factory: WebSocketFactory = (endpoint) => new WebSocket(endpoint, {
+      headers: sharedConnectionHeaders(endpoint),
+      maxPayload: 32 * 1024 * 1024,
+    }),
   ): RpcConnection {
     const connection = new RpcConnection();
     connection.bindWebSocket(factory(url));
@@ -189,9 +194,9 @@ export class RpcConnection {
   }
 
   close(): void {
-    if (this.closed) return;
-    this.fail(new Error('connection closed'));
+    if (!this.closed) this.fail(new Error('connection closed'));
     this.closeTransport?.();
+    this.closeTransport = null;
     this.emitter.removeAllListeners();
   }
 }

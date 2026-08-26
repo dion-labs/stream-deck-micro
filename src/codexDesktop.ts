@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { cleanDesktopEnvironment } from './sharedRuntime.js';
 
 type CommandRunner = (command: string, args: string[]) => Promise<void>;
 
@@ -22,7 +23,7 @@ export function openCodexThread(
 
 function runCommand(command: string, args: string[]): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
-    execFile(command, args, { timeout: 10_000 }, (error) => {
+    execFile(command, args, { timeout: 10_000, env: cleanDesktopEnvironment(process.env) }, (error) => {
       if (error) rejectPromise(error);
       else resolvePromise();
     });

@@ -907,12 +907,14 @@ function renderDesktopConnection(status) {
     var versions = desktop.serverVersions || {};
     $('desktopBannerMessage').textContent = desktop.serverUpdateError || (desktop.serverUpdating
       ? 'Reopening Desktop and restoring your saved session buttons. Please wait.'
-      : 'Running ' + versions.runningVersion + '; installed ' + versions.bundledVersion + '. Press the central UPDATE CODEX key in Live mode or on the deck. This restarts the backend and may interrupt active turns; nothing is downloaded.');
+      : 'Running ' + versions.runningVersion + '; installed ' + versions.bundledVersion + '. Shared control requires compatibility verification. At a safe stopping point, quit Codex, run shared install, then shared open. Restarting may interrupt active turns. Unverified builds are never activated by the deck.');
     return;
   }
-  banner.classList.toggle('error', desktop.state === 'restart-required' || Boolean(desktop.restoreError));
+  banner.classList.toggle('error', desktop.state === 'restart-required' || desktop.state === 'unavailable' || Boolean(desktop.restoreError));
   var title = desktop.restoreError
     ? 'Session restore needs attention'
+    : desktop.state === 'unavailable'
+      ? 'Shared control disabled'
     : desktop.state === 'restart-required'
       ? 'Restart ChatGPT Desktop'
       : desktop.state === 'waiting'

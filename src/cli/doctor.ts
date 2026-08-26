@@ -93,10 +93,10 @@ export function collectDoctorChecks(
       const desktopEndpoint = commandOutput('/bin/launchctl', ['getenv', DESKTOP_ENDPOINT_ENV]);
       checks.push({
         name: 'Codex Desktop routing',
-        status: desktopEndpoint === config.appServer.url ? 'pass' : 'fail',
-        detail: desktopEndpoint === config.appServer.url
-          ? desktopEndpoint
-          : `expected ${config.appServer.url}; reinstall shared mode`,
+        status: desktopEndpoint ? 'fail' : 'pass',
+        detail: desktopEndpoint
+          ? 'Legacy global routing is still set; run shared uninstall, then shared install. Do not restart Codex from an app with stale inherited routing.'
+          : 'No global Desktop override; use shared open for scoped activation.',
       });
       const desktopConnection = desktopConnectionStatus(config.appServer.url);
       checks.push({

@@ -35,8 +35,9 @@ import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
 import {
   desktopConnectionStatus,
-  restartCodexDesktop,
-  restartManagedDesktopServer,
+  restartSharedCodexDesktop,
+  assertSharedLaunchCompatible,
+  DEFAULT_SHARED_SERVER_URL,
   type DesktopConnectionStatus,
 } from './sharedServer.js';
 
@@ -138,10 +139,12 @@ export async function runDaemon(
 ): Promise<void> {
   const { config, sourcePath } = loadConfig(explicitConfigPath);
   const surfaceMode = options.surfaceMode ?? config.surface.mode;
+  // Missing/removed shared setup must never create a Micro-owned backend.
+  const sharedEndpoint = config.appServer.url ?? DEFAULT_SHARED_SERVER_URL;
   const adapter = new AppServerAdapter({
     approvalPolicy: config.codex.approvalPolicy,
     sandbox: config.codex.sandboxMode,
-    endpoint: config.appServer.url,
+    endpoint: sharedEndpoint,
   });
   const appServer = adapter;
   const manager = new SlotManager(adapter, {
@@ -164,7 +167,6 @@ export async function runDaemon(
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
   let persisted = loadState();
-  const sharedEndpoint = config.appServer.url;
   const serverVersions = sharedEndpoint ? new SharedServerVersionMonitor(sharedEndpoint) : null;
   let desktopConnection: DesktopConnectionStatus = sharedEndpoint
     ? desktopConnectionStatus(sharedEndpoint)
@@ -180,6 +182,7 @@ export async function runDaemon(
   let serverUpdating = false;
   let serverUpdateError: string | null = null;
   let desktopRefreshPromise: Promise<void> | null = null;
+  let desktopGeneration: string | undefined;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
   const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
   const desktopFocusMonitor = sharedEndpoint ? new CodexDesktopFocusMonitor() : null;
@@ -197,6 +200,7 @@ export async function runDaemon(
       throw new Error('Update the shared Codex backend using the central UPDATE CODEX button first. This may interrupt active turns.');
     }
     if (desktopConnection.state !== 'connected') throw new Error(desktopConnection.message);
+    if (appServer.transportClosed) throw new Error('Micro lost its shared connection and is reconnecting. No action was sent.');
     if (!stateHydrated) throw new Error('Shared control is connected; session bindings are still restoring.');
   }
 
@@ -270,7 +274,8 @@ export async function runDaemon(
         if (manager.snapshot(action.index).state !== 'empty') openSlotInCodex(action.index);
         break;
       case 'stop':
-        manager.interrupt();
+        try { assertDesktopReady(); manager.interrupt(); }
+        catch (error) { log('stop blocked:', error instanceof Error ? error.message : String(error)); }
         break;
       case 'sleep':
         if (config.deck.sleepKey === 'sleep') {
@@ -331,8 +336,9 @@ export async function runDaemon(
             log(`slot ${slot.index + 1}: writer held elsewhere → monitor-only`);
           } else {
             log(`resume slot ${slot.index} failed:`, String(e));
-            if (serverUpdating) throw e;
-            continue;
+            // A transient backend failure must never overwrite saved bindings
+            // with a partially restored (or empty) deck.
+            throw e;
           }
         }
         restoredSessionIds.add(slot.sessionId);
@@ -398,6 +404,20 @@ export async function runDaemon(
       return;
     }
     const next = desktopConnectionStatus(sharedEndpoint);
+    if (stateHydrated && (next.state !== 'connected' || appServer.transportClosed)) {
+      persistState();
+      persisted = loadState() ?? persisted;
+      stateHydrated = false;
+      restorePromise = null;
+    }
+    if (next.state === 'connected' && (next.generation !== desktopGeneration || appServer.transportClosed)) {
+      persistState();
+      persisted = loadState() ?? persisted;
+      stateHydrated = false;
+      restorePromise = null;
+      appServer.reconnect();
+      desktopGeneration = next.generation;
+    }
     if (next.state !== desktopConnection.state) {
       log(`desktop shared control → ${next.state}`);
     }
@@ -430,7 +450,7 @@ export async function runDaemon(
     desktopRestartPromise = (async () => {
       syncDesktopRecoverySurface();
       log('Codex Desktop restart requested from the deck');
-      await restartCodexDesktop();
+      await restartSharedCodexDesktop(sharedEndpoint);
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await refreshDesktopConnection();
         if (desktopConnection.state === 'connected' && stateHydrated) {
@@ -459,6 +479,12 @@ export async function runDaemon(
     if (!sharedEndpoint || !serverVersions || !needsServerUpdate()) {
       return Promise.reject(new Error('The managed shared server does not need an update'));
     }
+    // Compatibility is checked before quitting Desktop or changing bindings.
+    return assertSharedLaunchCompatible(sharedEndpoint).then(() => performServerUpdate());
+  }
+
+  function performServerUpdate(): Promise<void> {
+    if (desktopRestartPromise) return desktopRestartPromise;
     // Snapshot the latest bindings, not just the configuration present at boot.
     persistState();
     persisted = loadState() ?? persisted;
@@ -471,11 +497,9 @@ export async function runDaemon(
       // Let any read-only status probe finish before replacing the backend.
       await desktopRefreshPromise;
       log('Shared Codex backend update requested; active turns may be interrupted');
-      await restartCodexDesktop(undefined, 40, async () => {
-        await restartManagedDesktopServer(sharedEndpoint);
-        appServer.reconnect();
-      });
-      const versions = await serverVersions.refresh(true);
+      await restartSharedCodexDesktop(sharedEndpoint);
+      appServer.reconnect();
+      const versions = await serverVersions!.refresh(true);
       if (versions.state !== 'current') throw new Error('The shared backend has not picked up the installed Codex version; press UPDATE CODEX to retry.');
       for (let attempt = 0; attempt < 40; attempt += 1) {
         desktopConnection = desktopConnectionStatus(sharedEndpoint);
@@ -692,6 +716,7 @@ export async function runDaemon(
       }
       case 'sessions': {
         if (!appServer) throw new Error('only supported with the codex-app-server harness');
+        if (desktopConnection.state !== 'connected' || appServer.transportClosed) return [];
         return appServer.listSessions();
       }
       case 'attach': {
