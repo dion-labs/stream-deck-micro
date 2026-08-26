@@ -97,8 +97,37 @@ creation, tool discovery, authenticated second-client attachment, and same-ID
 resume of generated durable test history. Missing/wrong tokens were rejected.
 The durable fixture is assistant-only generated data in a temporary home; this
 does not prove persistence of a newly created no-turn task. No model turns or
-live Desktop app-tool calls were sent. Real Desktop/deck acceptance remains
-pending; the healthy private Desktop setup was not changed.
+live Desktop app-tool calls were sent during the isolated checks. The live test
+below was separately authorized afterwards; isolated results are not a claim
+that all Desktop/deck acceptance steps passed.
+
+### Controlled live restart and restoration: 2026-08-26
+
+The user authorized activation and confirmed that Desktop restarted correctly.
+The first live restore exposed a different failure: fetching a long task's full
+history exceeded Micro's 32 MiB WebSocket message limit. Restoration stopped
+partway, but the saved bindings were not overwritten. A read-only history probe
+confirmed `WS_ERR_UNSUPPORTED_MESSAGE_LENGTH`; metadata-only resume of that same
+task returned about 4 KiB and preserved its ID.
+
+Micro now opts into the experimental API and requests `excludeTurns: true` on
+resume. It retains the same shared task and live events without downloading a
+history it does not display. The install-time compatibility probe checks that
+contract too. Transport errors retain a safe library error code instead of
+collapsing every failure into an indistinguishable WebSocket error.
+
+After rebuilding and restarting **only Micro's Marketplace bridge**, all eight
+saved assignments restored, `sessionsReady` became true, and `restoreError`
+cleared. Desktop/backend PIDs were unchanged. Bindings and other settings matched
+the pre-activation backup; selection followed the currently focused Desktop
+task as intended. No new Marketplace plugin package was needed.
+
+Regression coverage includes a generated 33 MiB completed-turn history in an
+isolated home: full-history resume exceeds the bounded connection limit, while
+metadata-only resume succeeds with the same ID/path, no turns, and working MCP
+fixture discovery. No real task history or credentials enter that fixture, and
+no model turn is sent. Physical-deck send/stop, fresh-project creation and the
+other unperformed acceptance checks still need confirmation.
 
 ## Elgato deployment
 

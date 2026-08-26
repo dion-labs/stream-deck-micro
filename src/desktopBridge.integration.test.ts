@@ -144,6 +144,27 @@ describe('isolated Desktop MCP fixture', () => {
 });
 
 describe.skipIf(!binary)('real bundled App Server / isolated shared WS', () => {
+  it('resumes oversized history with metadata only, without raising the WS payload limit', async () => {
+    const state = probe();
+    const version = await state.version(binary!);
+    const fixture = state.durableFixture(version, 'x'.repeat(33 * 1024 * 1024));
+    await state.start(binary!, true);
+    const fullHistory = await state.client('sdm-full-history-regression');
+    await expect(fullHistory.request('thread/resume', {
+      ...state.threadParameters(), threadId: fixture.id, path: fixture.path,
+    })).rejects.toThrow('WS_ERR_UNSUPPORTED_MESSAGE_LENGTH');
+    await fullHistory.close();
+
+    const metadataOnly = await state.client('sdm-metadata-only-regression');
+    const resumed = await metadataOnly.request<{ thread: DesktopProbeThread }>('thread/resume', {
+      ...state.threadParameters(), threadId: fixture.id, excludeTurns: true,
+    });
+    expect(resumed.thread).toMatchObject({ id: fixture.id, path: fixture.path, turns: [] });
+    expect(Buffer.byteLength(JSON.stringify(resumed))).toBeLessThan(64 * 1024);
+    await state.tools(metadataOnly, fixture.id);
+    expect(metadataOnly.methods).not.toContain('turn/start');
+  }, TIMEOUT);
+
   it('reproduces missing MCP base config at thread/start', async () => {
     const state = probe();
     await state.start(binary!, false);

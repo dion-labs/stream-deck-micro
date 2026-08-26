@@ -104,8 +104,13 @@ export class RpcConnection {
       }
       this.dispatch(msg);
     });
-    socket.addEventListener('error', () => {
-      this.fail(new Error('app-server WebSocket failed'));
+    socket.addEventListener('error', (event) => {
+      const cause = event.error instanceof Error ? event.error : undefined;
+      const code = (cause as { code?: unknown } | undefined)?.code;
+      // Surface bounded library error codes, not arbitrary messages that might
+      // contain connection details. Retain the original cause for diagnostics.
+      const detail = typeof code === 'string' && /^WS_ERR_[A-Z_]+$/.test(code) ? ` (${code})` : '';
+      this.fail(new Error(`app-server WebSocket failed${detail}`, { cause }));
     });
     socket.addEventListener('close', () => {
       this.fail(new Error('app-server WebSocket closed'));

@@ -361,6 +361,7 @@ export class AppServerAdapter implements HarnessAdapter {
     if (this.initialized) return;
     await this.conn.request('initialize', {
       clientInfo: { name: 'stream-deck-micro', title: 'Stream Deck Micro', version: '0.2.0' },
+      capabilities: { experimentalApi: true },
     });
     this.conn.notify?.('initialized');
     this.initialized = true;
@@ -409,6 +410,9 @@ export class AppServerAdapter implements HarnessAdapter {
       const resp = (await this.conn.request('thread/resume', {
         threadId: id,
         cwd: opts.cwd,
+        // Keep the same live session and notifications without transferring its
+        // history. Long conversations can exceed the bounded WS frame size.
+        excludeTurns: true,
       })) as { thread?: { id?: string; name?: string | null } };
       const threadId = resp.thread?.id ?? id;
       return this.register(new AppServerSession(this.conn, threadId, resp.thread?.name ?? null));

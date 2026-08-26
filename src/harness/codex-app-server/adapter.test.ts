@@ -246,6 +246,27 @@ describe('AppServerAdapter', () => {
     await expect(adapter.resumeSession('abc', { cwd: '/x' })).rejects.toThrow(WriterHeldError);
   });
 
+  it('restores the same live session without fetching conversation history', async () => {
+    const conn = new FakeConn();
+    conn.respond('thread/resume', (params) => {
+      expect(params).toEqual({ threadId: 'long-session', cwd: '/x', excludeTurns: true });
+      return { thread: { id: 'long-session', name: 'Long session', turns: [] } };
+    });
+    const adapter = adapterWith(conn);
+    try {
+      const session = await adapter.resumeSession('long-session', { cwd: '/x' });
+      expect(conn.requests[0]).toMatchObject({
+        method: 'initialize', params: { capabilities: { experimentalApi: true } },
+      });
+      expect(session.sessionId).toBe('long-session');
+      expect(session.name).toBe('Long session');
+      const events = await eventsOf(session);
+      conn.push('turn/started', { threadId: 'long-session', turn: { id: 'live-turn' } });
+      expect(events).toEqual([{ type: 'turn-started' }]);
+      expect(conn.requests.map(({ method }) => method)).toEqual(['initialize', 'thread/resume']);
+    } finally { adapter.dispose(); }
+  });
+
   it('thread/name/updated updates the session name via a meta event', async () => {
     const conn = new FakeConn();
     const adapter = adapterWith(conn);
@@ -305,6 +326,7 @@ describe('AppServerAdapter', () => {
     expect(conn.requests.find((request) => request.method === 'thread/resume')?.params).toEqual({
       threadId: 'ext-1',
       cwd: '/tmp/rust',
+      excludeTurns: true,
     });
     expect(events).toContainEqual({ type: 'turn-started' });
     expect(events).toContainEqual({ type: 'turn-completed' });

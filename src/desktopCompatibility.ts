@@ -40,6 +40,7 @@ export interface DesktopProbeThread {
   id: string;
   path?: string | null;
   createdAt?: number;
+  turns?: unknown[];
 }
 
 /**
@@ -248,7 +249,7 @@ export class IsolatedDesktopProbe {
   }
 
   /** Synthetic durable fixture, distinct from the ephemeral thread/start probe. */
-  durableFixture(version: string): DesktopProbeThread {
+  durableFixture(version: string, completedTurnText?: string): DesktopProbeThread {
     const id = randomUUID();
     const timestamp = new Date().toISOString();
     const directory = join(realpathSync(this.env.CODEX_HOME!), 'sessions', ...timestamp.slice(0, 10).split('-'));
@@ -263,6 +264,14 @@ export class IsolatedDesktopProbe {
         type: 'message', role: 'assistant',
         content: [{ type: 'output_text', text: 'Isolated durable compatibility fixture.' }],
       } },
+      // Optional synthetic UI turn: a bare response_item is not rendered as
+      // conversation history, so it cannot prove excludeTurns takes effect.
+      ...(completedTurnText === undefined ? [] : [
+        { type: 'task_started', turn_id: id, model_context_window: 128000 },
+        { type: 'user_message', message: 'Synthetic fixture only', images: [], local_images: [], text_elements: [] },
+        { type: 'agent_message', message: completedTurnText, phase: 'final_answer' },
+        { type: 'task_complete', turn_id: id, last_agent_message: null },
+      ].map((payload) => ({ timestamp, type: 'event_msg', payload }))),
     ];
     writeFileSync(path, `${entries.map((entry) => JSON.stringify(entry)).join('\n')}\n`, { mode: 0o600, flag: 'wx' });
     return { id, path };
@@ -304,24 +313,31 @@ export async function verifyDesktopServer(binary: string): Promise<{ version: st
     checks.push('codex_app.echo discovered by both WS clients for the same live thread');
     // A separate generated durable rollout verifies real disk resume. No fake
     // history request or alternate ID is accepted as a weaker success gate.
-    const fixture = probe.durableFixture(version);
+    const fixture = probe.durableFixture(version, 'Generated completed turn; no model request was sent.');
     const firstResume = await first.request<{ thread: DesktopProbeThread }>('thread/resume', {
       ...probe.threadParameters(), threadId: fixture.id, path: fixture.path,
     });
     if (firstResume.thread?.id !== fixture.id || firstResume.thread.path !== fixture.path) {
       throw new Error('Durable fixture resume changed the thread ID or rollout path');
     }
+    if (!firstResume.thread.turns?.length) {
+      throw new Error('Generated fixture has no rendered history; cannot verify metadata-only resume');
+    }
     const secondResume = await second.request<{ thread: DesktopProbeThread }>('thread/resume', {
-      ...probe.threadParameters(), threadId: fixture.id,
+      ...probe.threadParameters(), threadId: fixture.id, excludeTurns: true,
     });
     if (secondResume.thread?.id !== fixture.id || secondResume.thread.path !== fixture.path) {
       throw new Error('Second-client durable resume changed the thread ID or rollout path');
     }
+    if (secondResume.thread.turns?.length !== 0) {
+      throw new Error('Metadata-only resume did not omit conversation history');
+    }
     await probe.tools(first, fixture.id);
     await probe.tools(second, fixture.id);
     checks.push('generated durable JSONL fixture resumed by path and then exact same ID on two live connections',
+      'metadata-only resume preserves the same thread without returning conversation history',
       'codex_app.echo discovered on the same resumed durable fixture by both clients',
-      'LIMITATION: durable history is generated assistant-only test data; persistence of a newly started no-turn task is not proven');
+      'LIMITATION: durable history is generated test data; persistence of a newly started no-turn task is not proven');
     const methods = probe.fixtureMethods();
     if (!methods.includes('initialize') || !methods.includes('tools/list') || methods.includes('tools/call')) {
       throw new Error(`Unexpected fixture activity: ${methods.join(', ')}`);

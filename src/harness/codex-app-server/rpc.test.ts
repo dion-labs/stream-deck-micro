@@ -30,6 +30,10 @@ class FakeSocket {
     this.emit('message', { data: JSON.stringify(payload) });
   }
 
+  fail(error: Error): void {
+    this.emit('error', { error });
+  }
+
   private emit(type: string, event: any): void {
     for (const listener of this.listeners.get(type) ?? []) listener(event);
   }
@@ -71,5 +75,29 @@ describe('RpcConnection WebSocket transport', () => {
     socket.close();
 
     await expect(pending).rejects.toThrow('WebSocket closed');
+  });
+
+  it('retains payload-limit diagnostics and still closes the failed transport', async () => {
+    const socket = new FakeSocket();
+    const connection = RpcConnection.webSocket('ws://127.0.0.1:17532', () => socket);
+    socket.open();
+    const pending = connection.request('thread/resume');
+    const cause = Object.assign(new Error('Max payload size exceeded'), { code: 'WS_ERR_UNSUPPORTED_MESSAGE_LENGTH' });
+    socket.fail(cause);
+    await expect(pending).rejects.toMatchObject({
+      message: 'app-server WebSocket failed (WS_ERR_UNSUPPORTED_MESSAGE_LENGTH)', cause,
+    });
+    expect(connection.isClosed).toBe(true);
+    connection.close();
+    expect(socket.readyState).toBe(3);
+  });
+
+  it('does not expose arbitrary transport error messages as UI diagnostics', async () => {
+    const socket = new FakeSocket();
+    const connection = RpcConnection.webSocket('ws://127.0.0.1:17532', () => socket);
+    const pending = connection.request('initialize');
+    socket.fail(new Error('private connection details'));
+    await expect(pending).rejects.toThrow(/^app-server WebSocket failed$/);
+    connection.close();
   });
 });
