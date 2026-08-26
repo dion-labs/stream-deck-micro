@@ -5,6 +5,9 @@ Versioning once it reaches 1.0.
 
 ## 0.1.0 - Unreleased
 
+- Detect shared Codex backend version mismatches after Desktop updates and offer
+  a single central UPDATE CODEX recovery key (Marketplace plugin 0.1.0.3).
+
 - Monitor and control up to fifteen Codex sessions from a Stream Deck MK.2,
   with seven session keys in the default layout.
 - Show live session state on RGB keys and in the local Control Room.

@@ -30,6 +30,13 @@ blacks out every key except a central **RESTART CODEX** action. Pressing it asks
 Desktop to quit and reopen on the shared server; the normal profile returns once
 the saved sessions have restored.
 
+Plugin **0.1.0.3** also labels the central recovery key **UPDATE CODEX** when
+the bridge detects a running backend that differs from Desktop's installed
+version. It shows **UPDATING CODEX** while recovery is in progress. This uses the
+already-installed executable; it does not download an app update. Update the
+local bridge as well as the plugin. Older plugins still forward the central
+key correctly, but show the old RESTART wording instead of the update states.
+
 ## Release
 
 ```bash

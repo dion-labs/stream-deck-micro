@@ -28,7 +28,7 @@ export interface DeckEvents {
 
 export type DeckMode = 'awake' | 'attention' | 'asleep';
 export type AttentionState = 'done' | 'error';
-export type DesktopRecoveryState = 'restart-required' | 'restarting';
+export type DesktopRecoveryState = 'restart-required' | 'restarting' | 'update-required' | 'updating';
 
 export interface DeckStatus {
   mode: DeckMode;
@@ -345,7 +345,7 @@ export class DeckController {
 
   private onDown(keyIndex: number): void {
     if (this.desktopRecovery) {
-      if (keyIndex === RECOVERY_KEY_INDEX && this.desktopRecovery === 'restart-required') {
+      if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'update-required'].includes(this.desktopRecovery)) {
         this.emitter.emit('restartCodex');
       }
       return;
@@ -372,11 +372,13 @@ export class DeckController {
     this.device.clearAllKeys();
     if (this.desktopRecovery) {
       const restarting = this.desktopRecovery === 'restarting';
+      const updating = this.desktopRecovery === 'updating';
+      const busy = restarting || updating;
       this.device.fillImage(
         RECOVERY_KEY_INDEX,
         renderActionKey(
-          restarting ? 'OPENING' : 'RESTART',
-          restarting ? [62, 74, 96] : [180, 108, 20],
+          updating ? 'UPDATING' : restarting ? 'OPENING' : this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RESTART',
+          busy ? [62, 74, 96] : [180, 108, 20],
           'CODEX',
         ),
         { format: 'rgba' },

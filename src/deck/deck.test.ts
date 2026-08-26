@@ -347,4 +347,33 @@ describe('DeckController', () => {
     expect(c.status().mode).toBe('awake');
     c.close();
   });
+
+  it('shows only UPDATE CODEX and blocks all normal/repeated actions during an update', () => {
+    vi.useFakeTimers();
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    c.render(Array.from({ length: 6 }, (_, i) => slot(i, 'idle')), 2);
+    const recoveries: string[] = [];
+    const actions: unknown[] = [];
+    c.on('restartCodex', () => { recoveries.push('update'); c.setDesktopRecovery('updating'); });
+    c.on('action', (action) => actions.push(action));
+    c.setDesktopRecovery('update-required');
+    vi.advanceTimersByTime(20 * 60_000);
+    expect(c.status().mode).toBe('awake');
+    expect([...deck.fills.keys()]).toEqual([7]);
+    for (let key = 0; key < 15; key += 1) if (key !== 7) deck.press(key);
+    expect(actions).toEqual([]);
+    expect(recoveries).toEqual([]);
+    deck.press(7);
+    deck.press(7);
+    expect(recoveries).toEqual(['update']);
+    expect(c.status().desktopRecovery).toBe('updating');
+    expect([...deck.fills.keys()]).toEqual([7]);
+    c.setDesktopRecovery('update-required');
+    deck.press(7);
+    expect(recoveries).toEqual(['update', 'update']);
+    c.setDesktopRecovery(null);
+    expect(deck.fills.size).toBeGreaterThan(1);
+    c.close();
+  });
 });

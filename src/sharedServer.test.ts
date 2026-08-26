@@ -186,4 +186,38 @@ describe('shared App Server setup', () => {
 
     expect(calls).toEqual(['quit', 'wait']);
   });
+
+  it('updates the backend only after Desktop exits, then reopens Desktop', async () => {
+    const calls: string[] = [];
+    const running = [true, false];
+    await restartCodexDesktop({
+      requestQuit: async () => { calls.push('quit'); },
+      isRunning: () => running.shift() ?? false,
+      open: async () => { calls.push('open'); },
+      wait: async () => { calls.push('wait'); },
+    }, 4, async () => { calls.push('update backend'); });
+    expect(calls).toEqual(['quit', 'wait', 'update backend', 'open']);
+  });
+
+  it('reopens Desktop and surfaces a backend update failure for retry', async () => {
+    const calls: string[] = [];
+    await expect(restartCodexDesktop({
+      requestQuit: async () => { calls.push('quit'); },
+      isRunning: () => false,
+      open: async () => { calls.push('open'); },
+      wait: async () => {},
+    }, 4, async () => { throw new Error('backend failed'); })).rejects.toThrow('backend failed');
+    expect(calls).toEqual(['quit', 'open']);
+  });
+
+  it('never updates the backend if Desktop refuses to quit', async () => {
+    let updated = false;
+    await expect(restartCodexDesktop({
+      requestQuit: async () => {},
+      isRunning: () => true,
+      open: async () => {},
+      wait: async () => {},
+    }, 1, async () => { updated = true; })).rejects.toThrow('did not quit');
+    expect(updated).toBe(false);
+  });
 });

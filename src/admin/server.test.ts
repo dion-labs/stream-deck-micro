@@ -87,6 +87,9 @@ describe('Control Room server', () => {
     expect(html).toContain('slot numbers unchanged');
     expect(html).toContain('Restart ChatGPT Desktop');
     expect(html).toContain('Micro has not attached to your sessions yet');
+    expect(html).toContain('Update shared Codex backend');
+    expect(html).toContain('may interrupt active turns');
+    expect(html).toContain("recovery === 'updating'");
   });
 
   it('forwards a targeted replacement attachment to the daemon', async () => {
