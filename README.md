@@ -137,9 +137,26 @@ bearer token; it is never exposed beyond `127.0.0.1`.
 
 **Normal Dock/Spotlight launches remain private.** To use Micro after quitting
 Desktop or rebooting, use `shared open` again. With verified setup, the deck's
-explicit **RESTART CODEX** action can also switch a running private Desktop into
+explicit **RETRY SHARED** action can also switch a running private Desktop into
 shared control. This interrupts active tasks, so use it only at a safe stopping
 point. Micro never switches or restarts Desktop automatically.
+
+If shared control is unhealthy, the recovery surface offers two deliberately
+different choices. **RETRY SHARED** attempts the verified integration again.
+The prominent **RECOVER CODEX** escape hatch prioritizes Desktop availability:
+it gracefully quits ChatGPT, removes Micro's shared routing, stops only bundled
+Codex processes verified to be listening on Micro's exact loopback endpoint,
+and reopens ChatGPT in private stdio mode. Saved deck bindings are preserved,
+but Micro stays paused until shared mode is investigated and explicitly set up
+again. The same action is available from Control Room and Terminal:
+
+```bash
+stream-deck-micro shared recover ./config.json
+```
+
+Recovery may interrupt active turns. It never kills by process name, port alone,
+or an unverified executable, and it re-checks command identity before escalating
+from graceful termination.
 
 The installed Desktop application and server are fingerprinted. If either
 changes, shared launch falls back to Desktop's native private server. The deck

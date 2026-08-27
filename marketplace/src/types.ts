@@ -28,6 +28,7 @@ export interface DaemonStatus {
     };
     layout: { keyIndex: number; action: SurfaceAction }[];
     attention: { index: number; state: 'done' | 'error'; sessionId: string | null }[];
-    desktopRecovery: 'restart-required' | 'restarting' | 'update-required' | 'updating' | null;
+    desktopRecovery: 'restart-required' | 'restarting' | 'update-required' | 'updating'
+      | 'shared-error' | 'recovering-private' | 'private-ready' | null;
   };
 }

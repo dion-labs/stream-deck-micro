@@ -37,6 +37,23 @@ This is still an experimental integration. The scoped CLI override was verified
 in the installed Desktop source, not established as a stable public extension
 contract. Public protocol reference: [OpenAI App Server documentation](https://learn.chatgpt.com/docs/app-server).
 
+## Orphan-listener incident (2026-08-27)
+
+After shared mode had been reinstalled, a bundled Codex App Server from an
+earlier launch remained on `ws://127.0.0.1:17532`. It still held thread writers,
+so Desktop resume reported `already has an active writer`; remote control also
+reported HTTP 409 because another App Server was already online. Retrying shared
+startup was the wrong default while Desktop itself was unusable.
+
+The recovery UX now separates **RETRY SHARED** from **RECOVER CODEX**. The latter
+is an availability-first escape hatch: release Micro's client, preserve saved
+bindings, gracefully stop Desktop, uninstall shared routing, terminate only an
+exact bundled-Codex `app-server --listen <validated endpoint>` process, and open
+private stdio Desktop with Micro routing variables explicitly cleared. Process
+identity is checked again immediately before TERM and KILL; an unrelated process
+using the same port or PID is never selected. A failed cleanup still attempts to
+reopen private Desktop and leaves recovery available for another attempt.
+
 ## Failure boundaries
 
 - Unknown build, launch flags, or absent setup: native Desktop stdio, no shared
@@ -54,6 +71,10 @@ contract. Public protocol reference: [OpenAI App Server documentation](https://l
   configuration does not spawn a private, Micro-owned server.
 - Uninstall remains usable from Terminal even when Desktop is broken. It removes
   legacy launchd routing and installation state, preserving saved deck bindings.
+- The recovery surface and `shared recover` command provide a stronger escape
+  hatch when Desktop is unusable: quit Desktop, uninstall shared routing, stop
+  only exact bundled-Codex listeners on the validated loopback endpoint, and
+  reopen private stdio Desktop. Process identity is re-checked before SIGKILL.
 - The launcher is kept as a native passthrough after uninstall. Removing the
   project/package later does not strand a running Desktop's CLI override.
 

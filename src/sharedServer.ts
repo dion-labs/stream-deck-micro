@@ -61,6 +61,12 @@ export interface CodexDesktopLifecycle {
   wait(ms: number): Promise<void>;
 }
 
+export interface PrivateCodexRecoveryLifecycle extends CodexDesktopLifecycle {
+  uninstall(configPath?: string): Promise<void>;
+  readProcesses(): string;
+  signal(pid: number, signal: NodeJS.Signals): void;
+}
+
 export interface SharedServerStatus {
   installed: boolean;
   healthy: boolean;
@@ -329,6 +335,66 @@ export async function restartSharedCodexDesktop(endpoint: string): Promise<void>
   }
 }
 
+/**
+ * Fail-safe escape hatch: remove shared routing, stop only verified bundled
+ * listeners for the configured endpoint, and reopen Desktop in private mode.
+ */
+export async function recoverPrivateCodex(
+  configPath?: string,
+  requestedEndpoint = DEFAULT_SHARED_SERVER_URL,
+  lifecycle: PrivateCodexRecoveryLifecycle = macPrivateRecoveryLifecycle,
+): Promise<void> {
+  const endpoint = validateSharedEndpoint(requestedEndpoint);
+  await restartCodexDesktop(lifecycle, 40, async () => {
+    await lifecycle.uninstall(configPath);
+    await stopManagedSharedListeners(endpoint, lifecycle);
+  });
+}
+
+export function managedSharedListenerPids(processes: string, requestedEndpoint: string): number[] {
+  const endpoint = validateSharedEndpoint(requestedEndpoint);
+  const escapedEndpoint = endpoint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const listener = new RegExp(`(?:^|\\s)--listen(?:\\s+|=)${escapedEndpoint}(?:\\s|$)`);
+  return [...parseProcessList(processes)]
+    .filter(([, record]) => record.command.startsWith(`${DESKTOP_CODEX} `)
+      && /(?:^|\s)app-server(?:\s|$)/.test(record.command)
+      && listener.test(record.command))
+    .map(([pid]) => pid);
+}
+
+async function stopManagedSharedListeners(
+  endpoint: string,
+  lifecycle: PrivateCodexRecoveryLifecycle,
+): Promise<void> {
+  let remaining = managedSharedListenerPids(lifecycle.readProcesses(), endpoint);
+  for (const pid of remaining) signalIfStillManaged(pid, 'SIGTERM', endpoint, lifecycle);
+  for (let attempt = 0; attempt < 15 && remaining.length; attempt += 1) {
+    await lifecycle.wait(100);
+    remaining = managedSharedListenerPids(lifecycle.readProcesses(), endpoint);
+  }
+  // Re-resolve exact command lines before escalation, so PID reuse cannot make
+  // this target an unrelated process.
+  for (const pid of remaining) signalIfStillManaged(pid, 'SIGKILL', endpoint, lifecycle);
+  for (let attempt = 0; attempt < 10 && remaining.length; attempt += 1) {
+    await lifecycle.wait(100);
+    remaining = managedSharedListenerPids(lifecycle.readProcesses(), endpoint);
+  }
+  if (remaining.length) throw new Error('A verified shared Codex listener could not be stopped');
+}
+
+function signalIfStillManaged(
+  pid: number,
+  signal: NodeJS.Signals,
+  endpoint: string,
+  lifecycle: PrivateCodexRecoveryLifecycle,
+): void {
+  if (!managedSharedListenerPids(lifecycle.readProcesses(), endpoint).includes(pid)) return;
+  try { lifecycle.signal(pid, signal); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
 function hasDesktopAncestor(pid: number, records: Map<number, { ppid: number; command: string }>): boolean {
   const visited = new Set<number>();
   let record = records.get(pid);
@@ -366,6 +432,15 @@ const macCodexDesktopLifecycle: CodexDesktopLifecycle = {
   open: () => execFilePromise('/usr/bin/open', ['-a', 'ChatGPT', '--env', 'CODEX_APP_SERVER_WS_URL=',
     '--env', `CODEX_CLI_PATH=${DESKTOP_CODEX}`, '--env', 'CODEX_APP_SERVER_FORCE_CLI=1']),
   wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+};
+
+const macPrivateRecoveryLifecycle: PrivateCodexRecoveryLifecycle = {
+  ...macCodexDesktopLifecycle,
+  uninstall: async (configPath) => { await uninstallSharedServer(configPath); },
+  readProcesses: () => execFileSync('/bin/ps', ['-ax', '-o', 'pid=,ppid=,command='], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
+  }),
+  signal: (pid, signal) => { process.kill(pid, signal); },
 };
 
 function desktopAppIsRunning(): boolean {

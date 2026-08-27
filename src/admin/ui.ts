@@ -624,21 +624,34 @@ function renderDeck(status) {
   var recovery = controlMode !== 'configure' && status.deck && status.deck.desktopRecovery;
   if (recovery) {
     for (var recoveryKey = 0; recoveryKey < 15; recoveryKey++) {
+      var canRetryShared = recovery === 'restart-required' || recovery === 'update-required';
+      if (recoveryKey === 6 && canRetryShared) {
+        var updateNeeded = recovery === 'update-required';
+        var retryVisual = keyEl(
+          '<span class="t">' + (updateNeeded ? 'UPDATE' : 'RETRY') + '</span><span class="sub">shared</span>',
+          'act restart',
+          function() { return api('desktop/restart', {}).then(function() { toast('retrying shared Codex control'); }); },
+          updateNeeded ? 'Update and retry shared control. Active turns may be interrupted.' : 'Retry Codex Desktop on the shared server.'
+        );
+        deck.appendChild(retryVisual.root);
+        continue;
+      }
       if (recoveryKey !== 7) {
         deck.appendChild(keyEl('', '', null, 'waiting for Codex Desktop').root);
         continue;
       }
       var restarting = recovery === 'restarting';
       var updating = recovery === 'updating';
-      var updateNeeded = recovery === 'update-required';
-      var busy = restarting || updating;
+      var recoveringPrivate = recovery === 'recovering-private';
+      var privateReady = recovery === 'private-ready';
+      var busy = restarting || updating || recoveringPrivate;
       var recoveryVisual = keyEl(
-        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : updateNeeded ? 'UPDATE' : 'RESTART') + '</span><span class="sub">Codex</span>',
+        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER') + '</span><span class="sub">' + (privateReady ? 'private' : 'Codex') + '</span>',
         'act ' + (busy ? 'restarting' : 'restart'),
-        busy ? null : function() {
-          return api('desktop/restart', {}).then(function() { toast('recovering shared Codex control'); });
+        busy || privateReady ? null : function() {
+          return api('desktop/recover', {}).then(function() { toast('disabling shared mode and recovering Codex'); });
         },
-        updating ? 'Updating the shared backend and restoring your sessions' : restarting ? 'Codex Desktop is reopening' : updateNeeded ? 'Restart the shared backend with the installed Codex version. Active turns may be interrupted.' : 'restart Codex Desktop on the shared server'
+        privateReady ? 'Codex Desktop is usable in private mode; Micro shared control is disabled.' : busy ? 'Codex Desktop recovery is in progress.' : 'Disable Micro shared mode, stop verified leftover listeners, and reopen Codex privately. Active turns may be interrupted.'
       );
       deck.appendChild(recoveryVisual.root);
     }

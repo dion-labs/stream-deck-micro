@@ -6,7 +6,9 @@ import { ConfigSchema, DeckLayoutSchema, saveAppServerUrl, saveSurfaceMode } fro
 import {
   desktopConnectionFromOutputs,
   launchAgentPlist,
+  managedSharedListenerPids,
   processListHasDesktopPrivateAppServer,
+  recoverPrivateCodex,
   restartCodexDesktop,
   validateLoopbackEndpoint,
 } from './sharedServer.js';
@@ -119,6 +121,82 @@ describe('shared App Server setup', () => {
       '210 200 /Applications/ChatGPT.app/Contents/Resources/cua_node/bin/node_repl',
       `220 210 ${codex} app-server --listen stdio://`,
     ].join('\n'))).toBe(false);
+  });
+
+  it('identifies only bundled Codex listeners on the exact managed endpoint', () => {
+    const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const endpoint = 'ws://127.0.0.1:17532';
+    const processes = [
+      `2099 1 ${codex} app-server --listen ${endpoint}`,
+      `2100 1 ${codex} app-server --listen=ws://127.0.0.1:17000`,
+      `2101 1 /usr/local/bin/codex app-server --listen ${endpoint}`,
+      `2102 1 ${codex} app-server`,
+      `2103 1 ${codex} exec --listen ${endpoint}`,
+    ].join('\n');
+    expect(managedSharedListenerPids(processes, endpoint)).toEqual([2099]);
+  });
+
+  it('recovers private Desktop by uninstalling shared mode and stopping its orphan listener', async () => {
+    const calls: string[] = [];
+    const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const endpoint = 'ws://127.0.0.1:17532';
+    const running = [true, false];
+    let processes = `2099 1 ${codex} app-server --listen ${endpoint}`;
+    await recoverPrivateCodex('/tmp/micro-config.json', endpoint, {
+      requestQuit: async () => { calls.push('quit'); },
+      isRunning: () => running.shift() ?? false,
+      open: async () => { calls.push('open-private'); },
+      wait: async () => { calls.push('wait'); },
+      uninstall: async (path) => { calls.push(`uninstall:${path}`); },
+      readProcesses: () => processes,
+      signal: (pid, signal) => {
+        calls.push(`${signal}:${pid}`);
+        processes = '';
+      },
+    });
+    expect(calls).toEqual([
+      'quit', 'wait', 'uninstall:/tmp/micro-config.json', 'SIGTERM:2099',
+      'wait', 'open-private',
+    ]);
+  });
+
+  it('re-resolves process identity before escalating a stuck listener', async () => {
+    const calls: string[] = [];
+    const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const endpoint = 'ws://127.0.0.1:17532';
+    let reads = 0;
+    await recoverPrivateCodex(undefined, endpoint, {
+      requestQuit: async () => {},
+      isRunning: () => false,
+      open: async () => { calls.push('open-private'); },
+      wait: async () => {},
+      uninstall: async () => {},
+      readProcesses: () => {
+        reads += 1;
+        return reads === 1
+          ? `2099 1 ${codex} app-server --listen ${endpoint}`
+          : '2099 1 /Applications/Unrelated.app/Contents/MacOS/helper';
+      },
+      signal: (pid, signal) => { calls.push(`${signal}:${pid}`); },
+    });
+    expect(calls).toEqual(['open-private']);
+  });
+
+  it('uses SIGKILL only when the same verified listener ignores SIGTERM', async () => {
+    const calls: string[] = [];
+    const codex = '/Applications/ChatGPT.app/Contents/Resources/codex';
+    const endpoint = 'ws://127.0.0.1:17532';
+    let processes = `2099 1 ${codex} app-server --listen ${endpoint}`;
+    await recoverPrivateCodex(undefined, endpoint, {
+      requestQuit: async () => {}, isRunning: () => false,
+      open: async () => { calls.push('open-private'); }, wait: async () => {},
+      uninstall: async () => {}, readProcesses: () => processes,
+      signal: (pid, signal) => {
+        calls.push(`${signal}:${pid}`);
+        if (signal === 'SIGKILL') processes = '';
+      },
+    });
+    expect(calls).toEqual(['SIGTERM:2099', 'SIGKILL:2099', 'open-private']);
   });
 
   it('waits for Desktop without acquiring session writers', () => {

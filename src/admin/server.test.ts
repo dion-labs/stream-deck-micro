@@ -90,6 +90,9 @@ describe('Control Room server', () => {
     expect(html).toContain('Update shared Codex backend');
     expect(html).toContain('may interrupt active turns');
     expect(html).toContain("recovery === 'updating'");
+    expect(html).toContain("api('desktop/recover'");
+    expect(html).toContain("recovery === 'private-ready'");
+    expect(html).toContain('stop verified leftover listeners');
   });
 
   it('forwards a targeted replacement attachment to the daemon', async () => {

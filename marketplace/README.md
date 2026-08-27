@@ -25,10 +25,9 @@ position can host one of up to fifteen distinct session slots. This
 keeps the bundled profile editable without storing fifteen divergent action
 configurations.
 
-When Codex Desktop starts before the shared server, the surface temporarily
-blacks out every key except a central **RESTART CODEX** action. Pressing it asks
-Desktop to quit and reopen on the shared server; the normal profile returns once
-the saved sessions have restored.
+When Codex Desktop starts outside shared control, the recovery surface replaces
+normal actions. **RETRY SHARED** asks Desktop to quit and reopen on the shared
+server; **RECOVER CODEX** disables shared mode and restores private Desktop.
 
 Plugin **0.1.0.3** also labels the central recovery key **UPDATE CODEX** when
 the bridge detects a running backend that differs from Desktop's installed
@@ -36,6 +35,14 @@ version. It shows **UPDATING CODEX** while recovery is in progress. This uses th
 already-installed executable; it does not download an app update. Update the
 local bridge as well as the plugin. Older plugins still forward the central
 key correctly, but show the old RESTART wording instead of the update states.
+
+When shared control itself is unhealthy, the recovery surface shows **RETRY
+SHARED** to the left and a prominent **RECOVER CODEX** key in the center. Recover
+Codex removes Micro's shared routing, stops only verified leftover bundled-Codex
+listeners, and reopens Desktop privately. It preserves saved deck bindings and
+leaves Micro paused for investigation. Existing plugin builds still forward the
+center press to this fail-safe action, although they may display the older
+RESTART/UPDATE label until the Marketplace plugin is updated.
 
 ## Release
 

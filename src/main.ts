@@ -33,8 +33,10 @@ import { VirtualDeckDriver } from './deck/virtualDriver.js';
 import { serveIpc } from './ipc.js';
 import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
+import { desktopRecoveryState } from './desktopRecovery.js';
 import {
   desktopConnectionStatus,
+  recoverPrivateCodex,
   restartSharedCodexDesktop,
   assertSharedLaunchCompatible,
   DEFAULT_SHARED_SERVER_URL,
@@ -181,6 +183,9 @@ export async function runDaemon(
   let desktopRestartPromise: Promise<void> | null = null;
   let serverUpdating = false;
   let serverUpdateError: string | null = null;
+  let privateRecoveryPromise: Promise<void> | null = null;
+  let privateRecoveryComplete = false;
+  let privateRecoveryError: string | null = null;
   let desktopRefreshPromise: Promise<void> | null = null;
   let desktopGeneration: string | undefined;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
@@ -265,6 +270,11 @@ export async function runDaemon(
   deck.on('restartCodex', () => {
     void beginDesktopRestart().catch(() => {
       // The detailed failure is logged and the recovery key is restored.
+    });
+  });
+  deck.on('recoverCodex', () => {
+    void beginPrivateRecovery().catch(() => {
+      // The detailed failure is logged and the recovery key remains available.
     });
   });
   deck.on('action', (action) => {
@@ -422,23 +432,61 @@ export async function runDaemon(
       log(`desktop shared control → ${next.state}`);
     }
     desktopConnection = next;
-    await serverVersions?.refresh();
-    if (next.state === 'connected' && !needsServerUpdate()) await ensureSessionsHydrated();
-    syncDesktopRecoverySurface();
+    try {
+      await serverVersions?.refresh();
+      if (next.state === 'connected' && !needsServerUpdate()) await ensureSessionsHydrated();
+    } finally {
+      // Restore failures are themselves a recovery state. Never skip the
+      // escape hatch just because hydration threw before the next poll.
+      syncDesktopRecoverySurface();
+    }
   }
 
   function syncDesktopRecoverySurface(): void {
-    deck.setDesktopRecovery(
-      serverUpdating
-        ? 'updating'
-        : needsServerUpdate()
-          ? 'update-required'
-          : desktopRestartPromise
-            ? 'restarting'
-            : desktopConnection.state === 'restart-required'
-              ? 'restart-required'
-              : null,
-    );
+    deck.setDesktopRecovery(desktopRecoveryState({
+      privateRecovering: privateRecoveryPromise !== null,
+      privateComplete: privateRecoveryComplete,
+      serverUpdating,
+      updateRequired: needsServerUpdate(),
+      sharedRestarting: desktopRestartPromise !== null,
+      connectionState: desktopConnection.state,
+      restoreError,
+      privateRecoveryError,
+    }));
+  }
+
+  function beginPrivateRecovery(): Promise<void> {
+    if (privateRecoveryPromise) return privateRecoveryPromise;
+    if (privateRecoveryComplete) return Promise.resolve();
+    if (!sharedEndpoint) return Promise.reject(new Error('No shared Codex endpoint is configured'));
+    if (stateHydrated) persistState();
+    persisted = loadState() ?? persisted;
+    stateHydrated = false;
+    restorePromise = null;
+    privateRecoveryError = null;
+    // Release Micro's own writer/subscriptions before stopping the backend.
+    appServer.dispose();
+    privateRecoveryPromise = (async () => {
+      log('Private Codex recovery requested; disabling shared mode');
+      await recoverPrivateCodex(sourcePath ?? undefined, sharedEndpoint);
+      privateRecoveryComplete = true;
+      desktopConnection = {
+        state: 'unavailable', endpoint: null,
+        message: 'Codex Desktop is running privately. Micro shared control is disabled.',
+      };
+      restoreError = null;
+      serverUpdateError = null;
+      log('Codex Desktop recovered in private mode; Micro shared control is disabled');
+    })().catch((error) => {
+      privateRecoveryError = error instanceof Error ? error.message : String(error);
+      log('Private Codex recovery failed:', privateRecoveryError);
+      throw error;
+    }).finally(() => {
+      privateRecoveryPromise = null;
+      syncDesktopRecoverySurface();
+    });
+    syncDesktopRecoverySurface();
+    return privateRecoveryPromise;
   }
 
   function beginDesktopRestart(): Promise<void> {
@@ -617,8 +665,11 @@ export async function runDaemon(
   }
 
   async function handleIpc(cmd: string, args: Record<string, unknown>): Promise<unknown> {
-    if (serverUpdating && !['status', 'desktop.restart', 'desktop.update', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
-      throw new Error('Codex is updating; wait until your session buttons return.');
+    if ((serverUpdating || privateRecoveryPromise)
+      && !['status', 'desktop.restart', 'desktop.update', 'desktop.recover', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
+      throw new Error(privateRecoveryPromise
+        ? 'Codex is recovering in private mode; wait for the READY key.'
+        : 'Codex is updating; wait until your session buttons return.');
     }
     switch (cmd) {
       case 'status':
@@ -636,6 +687,8 @@ export async function runDaemon(
             serverVersions: serverVersions?.status ?? null,
             serverUpdating,
             serverUpdateError,
+            privateRecoveryComplete,
+            privateRecoveryError,
           },
         };
       case 'send': {
@@ -796,6 +849,9 @@ export async function runDaemon(
       case 'desktop.update':
       case 'desktop.restart':
         void beginDesktopRestart().catch(() => {});
+        return { accepted: true };
+      case 'desktop.recover':
+        void beginPrivateRecovery().catch(() => {});
         return { accepted: true };
       case 'deck.key': {
         if (!virtualDeck) throw new Error('deck.key is only available in marketplace surface mode');

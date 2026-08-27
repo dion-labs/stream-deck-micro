@@ -10,6 +10,7 @@ usage:
   stream-deck-micro shared open               open Codex with verified shared control (quit it first)
   stream-deck-micro shared verify             run an isolated compatibility probe; no live configuration changes
   stream-deck-micro shared status             inspect shared-server health and Desktop routing
+  stream-deck-micro shared recover [config]   disable shared mode and reopen Codex privately
   stream-deck-micro shared uninstall [config] remove shared mode and restore private sessions
   stream-deck-micro marketplace install [config]
                                                install the background Marketplace bridge
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'shared') {
-    const { installSharedServer, sharedServerStatus, uninstallSharedServer, openSharedCodexDesktop, DESKTOP_CODEX } = await import(
+    const { installSharedServer, sharedServerStatus, uninstallSharedServer, openSharedCodexDesktop, recoverPrivateCodex, DESKTOP_CODEX } = await import(
       '../sharedServer.js'
     );
     const [action = 'status', ...sharedArgs] = args;
@@ -60,6 +61,11 @@ async function main(): Promise<void> {
     if (urlIndex >= 0 && !sharedArgs[urlIndex + 1]) throw new Error('--url requires a value');
     const url = urlIndex >= 0 ? sharedArgs[urlIndex + 1] : undefined;
     const configPath = sharedArgs.find((arg, index) => arg !== '--url' && (urlIndex < 0 || index !== urlIndex + 1));
+    if (action === 'recover') {
+      await recoverPrivateCodex(configPath, url);
+      process.stdout.write('\nCodex reopened in private mode. Micro shared control is disabled; saved deck bindings were preserved.\n');
+      return;
+    }
     const status = action === 'install'
       ? await installSharedServer(configPath, url)
       : action === 'uninstall'

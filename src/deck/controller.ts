@@ -24,11 +24,15 @@ export interface DeckEvents {
   mode: (mode: DeckMode) => void;
   /** The user explicitly requested a graceful Codex Desktop restart. */
   restartCodex: () => void;
+  /** The user explicitly requested removal of shared mode and a private restart. */
+  recoverCodex: () => void;
 }
 
 export type DeckMode = 'awake' | 'attention' | 'asleep';
 export type AttentionState = 'done' | 'error';
-export type DesktopRecoveryState = 'restart-required' | 'restarting' | 'update-required' | 'updating';
+export type DesktopRecoveryState =
+  | 'restart-required' | 'restarting' | 'update-required' | 'updating'
+  | 'shared-error' | 'recovering-private' | 'private-ready';
 
 export interface DeckStatus {
   mode: DeckMode;
@@ -54,6 +58,7 @@ export interface DeckDriver {
 
 const PULSE_INTERVAL_MS = 450;
 const RECOVERY_KEY_INDEX = 7;
+const SHARED_RETRY_KEY_INDEX = 6;
 
 /**
  * Owns the physical Stream Deck: renders slots/actions onto keys, runs the
@@ -345,8 +350,10 @@ export class DeckController {
 
   private onDown(keyIndex: number): void {
     if (this.desktopRecovery) {
-      if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'update-required'].includes(this.desktopRecovery)) {
+      if (keyIndex === SHARED_RETRY_KEY_INDEX && ['restart-required', 'update-required'].includes(this.desktopRecovery)) {
         this.emitter.emit('restartCodex');
+      } else if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'update-required', 'shared-error'].includes(this.desktopRecovery)) {
+        this.emitter.emit('recoverCodex');
       }
       return;
     }
@@ -373,13 +380,23 @@ export class DeckController {
     if (this.desktopRecovery) {
       const restarting = this.desktopRecovery === 'restarting';
       const updating = this.desktopRecovery === 'updating';
-      const busy = restarting || updating;
+      const recoveringPrivate = this.desktopRecovery === 'recovering-private';
+      const privateReady = this.desktopRecovery === 'private-ready';
+      const canRetryShared = ['restart-required', 'update-required'].includes(this.desktopRecovery);
+      const busy = restarting || updating || recoveringPrivate;
+      if (canRetryShared) {
+        this.device.fillImage(
+          SHARED_RETRY_KEY_INDEX,
+          renderActionKey(this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY', [180, 108, 20], 'SHARED'),
+          { format: 'rgba' },
+        );
+      }
       this.device.fillImage(
         RECOVERY_KEY_INDEX,
         renderActionKey(
-          updating ? 'UPDATING' : restarting ? 'OPENING' : this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RESTART',
-          busy ? [62, 74, 96] : [180, 108, 20],
-          'CODEX',
+          updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER',
+          privateReady ? [37, 108, 72] : busy ? [62, 74, 96] : [18, 98, 127],
+          privateReady ? 'PRIVATE' : 'CODEX',
         ),
         { format: 'rgba' },
       );
