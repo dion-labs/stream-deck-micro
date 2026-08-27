@@ -15,6 +15,7 @@ import {
   type SurfaceMode,
 } from './config.js';
 import { SlotManager } from './core/slotManager.js';
+import { DetachedSession } from './core/detachedSession.js';
 import type { AgentSession, AgentSlotSnapshot } from './core/types.js';
 import { openCodexThread } from './codexDesktop.js';
 import { SharedServerVersionMonitor } from './serverUpdate.js';
@@ -188,6 +189,7 @@ export async function runDaemon(
   let privateRecoveryError: string | null = null;
   let desktopRefreshPromise: Promise<void> | null = null;
   let desktopGeneration: string | undefined;
+  let detachedBindingsLoaded = false;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
   const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
   const desktopFocusMonitor = sharedEndpoint ? new CodexDesktopFocusMonitor() : null;
@@ -196,7 +198,7 @@ export async function runDaemon(
   const persistState = () => {
     // Do not replace saved bindings with an empty startup snapshot while
     // Desktop is still joining the shared server.
-    if (stateHydrated) saveState(manager, config.slots.cwd, deck);
+    if (stateHydrated || detachedBindingsLoaded) saveState(manager, config.slots.cwd, deck);
   };
 
   function assertDesktopReady(): void {
@@ -571,6 +573,31 @@ export async function runDaemon(
     return desktopRestartPromise;
   }
 
+  /**
+   * Keep saved task buttons visible while Codex runs privately or shared
+   * control is reconnecting. These bindings support Desktop navigation only;
+   * hydration replaces them with live sessions once the App Server is ready.
+   */
+  function restoreDetachedBindings(): void {
+    if (!persisted) return;
+    const configuredSlots = new Set(assignedSlotIndexes());
+    const restoredSessionIds = new Set<string>();
+    for (const slot of persisted.slots) {
+      if (slot.index >= config.slots.count || !configuredSlots.has(slot.index)) continue;
+      if (restoredSessionIds.has(slot.sessionId)) continue;
+      manager.attachSession(
+        slot.index,
+        new DetachedSession(slot.sessionId, slot.label),
+        slot.label,
+      );
+      restoredSessionIds.add(slot.sessionId);
+      if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
+    }
+    detachedBindingsLoaded = restoredSessionIds.size > 0;
+    if (configuredSlots.has(persisted.selectedIndex)) manager.select(persisted.selectedIndex);
+  }
+
+  restoreDetachedBindings();
   syncDesktopRecoverySurface();
   deck.render(manager.snapshots(), manager.selectedIndex);
   try {
