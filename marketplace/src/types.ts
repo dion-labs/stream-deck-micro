@@ -18,6 +18,15 @@ export interface SlotStatus {
 export interface DaemonStatus {
   selectedIndex: number;
   surface: 'independent' | 'marketplace';
+  capabilities?: {
+    mode: 'live' | 'navigation-only' | 'offline';
+    label: string;
+    reason: string;
+    canNavigateSessions: boolean;
+    canConfigure: boolean;
+    canControlSessions: boolean;
+    canListSessions: boolean;
+  };
   slots: SlotStatus[];
   workflows: { id: string; name: string; prompt: string }[];
   deck: {
@@ -30,5 +39,19 @@ export interface DaemonStatus {
     attention: { index: number; state: 'done' | 'error'; sessionId: string | null }[];
     desktopRecovery: 'restart-required' | 'restarting' | 'update-required' | 'updating'
       | 'shared-error' | 'recovering-private' | 'private-ready' | null;
+    capabilityMode?: 'live' | 'navigation-only' | 'offline';
+    actionFeedback?: {
+      keyIndex: number;
+      outcome: 'blocked' | 'failed';
+      message: string;
+      expiresAt: number;
+    } | null;
   };
+}
+
+export interface PluginHeartbeat {
+  pluginVersion: string;
+  streamDeckVersion: string;
+  connectedDevices: number;
+  visibleKeys: number;
 }

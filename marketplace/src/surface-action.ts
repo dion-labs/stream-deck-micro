@@ -85,7 +85,21 @@ export class SurfaceKeyAction extends SingletonAction {
     if (this.polling) return;
     this.polling = true;
     try {
-      this.status = await this.bridge.status();
+      const connectedDevices = [...streamDeck.devices].filter((device) => device.isConnected).length;
+      const visibleKeys = [...this.actions].filter((visible) => visible.controllerType === 'Keypad').length;
+      try {
+        this.status = await this.bridge.heartbeat({
+          pluginVersion: streamDeck.info.plugin.version,
+          streamDeckVersion: streamDeck.info.application.version,
+          connectedDevices,
+          visibleKeys,
+        });
+      } catch (error) {
+        // Marketplace may update the plugin before the separately installed
+        // local bridge. Keep the old bridge usable during that rolling update.
+        if (!(error instanceof Error) || !error.message.includes('unknown cmd: plugin.heartbeat')) throw error;
+        this.status = await this.bridge.status();
+      }
       this.error = this.status.surface === 'marketplace'
         ? ''
         : 'Bridge is running in Independent mode';
@@ -123,7 +137,7 @@ export class SurfaceKeyAction extends SingletonAction {
   private inspectorState(): Record<string, JsonValue> {
     return {
       connected: Boolean(this.status && this.status.surface === 'marketplace'),
-      message: this.error || 'Connected to the local Stream Deck Micro bridge',
+      message: this.error || this.status?.capabilities?.reason || 'Connected to the local Stream Deck Micro bridge',
       mode: this.status?.deck.mode ?? 'offline',
     };
   }

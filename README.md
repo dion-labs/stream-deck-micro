@@ -176,6 +176,14 @@ real Desktop app-tools and physical-deck acceptance test.
 The deck daemon prints the local Control Room URL when it starts. By default it
 is `http://127.0.0.1:17531`.
 
+The local Control Room now reports whether Micro has **Live control**,
+**Navigation only**, or is **Offline**, together with component-level bridge,
+surface, plugin, Codex, control, and binding health. Its redacted diagnostic
+report intentionally omits prompts, task names and IDs, paths, and configuration
+values. The staged design for moving onboarding to Dion Labs without turning it
+into a cloud control plane is recorded in the
+[Hosted Control Room roadmap](docs/hosted-control-room-roadmap.md).
+
 Check or completely remove the integration at any time:
 
 ```bash

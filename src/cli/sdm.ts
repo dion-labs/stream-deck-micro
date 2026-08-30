@@ -27,6 +27,7 @@ usage:
   sdm workflow <id>          run a workflow on the selected slot
   sdm sessions               list Codex sessions
   sdm attach [id]            attach newest (or given) session to a free slot
+  sdm diagnostics            print a redacted runtime diagnostic report
 `;
 
 async function main(): Promise<void> {
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
       case 'status': {
         const status = await ipcCall<{
           selectedIndex: number;
+          capabilities: { label: string; reason: string };
           slots: SlotView[];
           workflows: { id: string; name: string }[];
           deck: {
@@ -44,6 +46,7 @@ async function main(): Promise<void> {
             settings: { autoSleep: { enabled: boolean; timeoutMinutes: number } };
           };
         }>(IPC_SOCKET, 'status');
+        console.log(`capability: ${status.capabilities.label} — ${status.capabilities.reason}`);
         console.log(`selected: ${status.selectedIndex}`);
         for (const s of status.slots) {
           const marker = s.index === status.selectedIndex ? '>' : ' ';
@@ -135,6 +138,11 @@ async function main(): Promise<void> {
         console.log(
           `attached "${result.name ?? result.index + 1}" to slot ${result.index + 1} (${result.mode === 'monitor' ? 'monitor-only, writer is elsewhere' : 'owned'}).`,
         );
+        return;
+      }
+      case 'diagnostics': {
+        const report = await ipcCall(IPC_SOCKET, 'diagnostics');
+        process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
         return;
       }
       default:

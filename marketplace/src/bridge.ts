@@ -1,7 +1,7 @@
 import { connect } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { DaemonStatus } from './types.js';
+import type { DaemonStatus, PluginHeartbeat } from './types.js';
 
 const SOCKET_PATH = process.env.STREAM_DECK_MICRO_SOCKET
   ?? join(homedir(), '.stream-deck-micro', 'daemon.sock');
@@ -9,6 +9,10 @@ const SOCKET_PATH = process.env.STREAM_DECK_MICRO_SOCKET
 export class BridgeClient {
   status(): Promise<DaemonStatus> {
     return this.call<DaemonStatus>('status');
+  }
+
+  heartbeat(value: PluginHeartbeat): Promise<DaemonStatus> {
+    return this.call<DaemonStatus>('plugin.heartbeat', { ...value });
   }
 
   press(index: number): Promise<DaemonStatus['deck']> {

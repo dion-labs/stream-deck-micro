@@ -5,6 +5,15 @@ import type { DaemonStatus } from './types.js';
 const status: DaemonStatus = {
   selectedIndex: 0,
   surface: 'marketplace',
+  capabilities: {
+    mode: 'live',
+    label: 'Live control',
+    reason: 'Shared sessions are ready.',
+    canNavigateSessions: true,
+    canConfigure: true,
+    canControlSessions: true,
+    canListSessions: true,
+  },
   slots: Array.from({ length: 6 }, (_, index) => ({
     index,
     state: index === 0 ? 'running' : 'idle',
@@ -26,6 +35,8 @@ const status: DaemonStatus = {
     ],
     attention: [],
     desktopRecovery: null,
+    capabilityMode: 'live',
+    actionFeedback: null,
   },
 };
 
@@ -57,6 +68,48 @@ describe('Marketplace key rendering', () => {
         : slot),
     };
     expect(renderKey(attached, 0, true)).toContain('ATTACHED');
+  });
+
+  it('distinguishes navigation-only sessions and disables control actions', () => {
+    const navigation = {
+      ...status,
+      capabilities: {
+        ...status.capabilities!,
+        mode: 'navigation-only' as const,
+        canControlSessions: false,
+        canListSessions: false,
+      },
+    };
+    expect(renderKey(navigation, 0, true)).toContain('NAV ONLY');
+    expect(renderKey(navigation, 0, true)).toContain('#185B64');
+    expect(renderKey(navigation, 14, true)).toContain('LIVE OFF');
+  });
+
+  it('renders immediate blocked-action feedback', () => {
+    const blocked = {
+      ...status,
+      deck: {
+        ...status.deck,
+        actionFeedback: {
+          keyIndex: 14,
+          outcome: 'blocked' as const,
+          message: 'LIVE OFF',
+          expiresAt: Date.now() + 1_000,
+        },
+      },
+    };
+    expect(renderKey(blocked, 14, false)).toContain('BLOCKED');
+    expect(renderKey(blocked, 14, false)).toContain('LIVE OFF');
+  });
+
+  it('keeps rendering with a pre-heartbeat bridge during rolling upgrades', () => {
+    const legacy = {
+      ...status,
+      capabilities: undefined,
+      deck: { ...status.deck, capabilityMode: undefined, actionFeedback: undefined },
+    };
+    expect(renderKey(legacy, 0, true)).toContain('WORKING');
+    expect(renderKey(legacy, 14, true)).toContain('PROMPT');
   });
 
   it('blacks out every action while simulated sleep is active', () => {

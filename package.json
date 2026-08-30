@@ -32,6 +32,7 @@
     "LICENSE",
     "SECURITY.md",
     "docs/shared-server-hardening.md",
+    "docs/hosted-control-room-roadmap.md",
     "config.example.json"
   ],
   "os": [
