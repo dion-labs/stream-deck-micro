@@ -1,10 +1,35 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { ADMIN_HTML } from './ui.js';
 
 export type ApiHandler = (cmd: string, args: Record<string, unknown>) => Promise<unknown>;
 
 const MAX_BODY_BYTES = 1_000_000;
+export const HOSTED_HEALTH_PATH = '/api/hosted/health';
+
+const HOSTED_CONTROL_ROOM_ORIGINS = new Set([
+  'https://deck.dionlabs.ai',
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
+]);
+
+const HEALTH_STATES = new Set([
+  'ready',
+  'navigation-only',
+  'action-required',
+  'offline',
+  'not-required',
+]);
+
+const HEALTH_COMPONENTS = [
+  'bridge',
+  'surface',
+  'plugin',
+  'codexDesktop',
+  'sharedControl',
+  'bindings',
+] as const;
 
 export interface AdminServer {
   url: string;
@@ -67,16 +92,21 @@ async function route(
     sendJson(res, 403, { error: 'forbidden host' });
     return;
   }
-  const requestOrigin = req.headers.origin;
-  if (requestOrigin && requestOrigin !== context.origin) {
-    sendJson(res, 403, { error: 'forbidden origin' });
-    return;
-  }
-
   const url = new URL(req.url ?? '/', context.origin);
   const path = url.pathname;
 
   try {
+    if (path === HOSTED_HEALTH_PATH) {
+      await serveHostedHealth(req, res, handle);
+      return;
+    }
+
+    const requestOrigin = req.headers.origin;
+    if (requestOrigin && requestOrigin !== context.origin) {
+      sendJson(res, 403, { error: 'forbidden origin' });
+      return;
+    }
+
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(renderAdminHtml(context.apiToken, context.nonce));
@@ -111,6 +141,164 @@ async function route(
   } catch (e) {
     sendJson(res, 400, { error: e instanceof Error ? e.message : String(e) });
   }
+}
+
+async function serveHostedHealth(
+  req: IncomingMessage,
+  res: ServerResponse,
+  handle: ApiHandler,
+): Promise<void> {
+  const origin = req.headers.origin;
+  if (typeof origin !== 'string' || !HOSTED_CONTROL_ROOM_ORIGINS.has(origin)) {
+    sendJson(res, 403, { error: 'hosted Control Room origin not allowed' });
+    return;
+  }
+
+  res.setHeader('access-control-allow-origin', origin);
+  res.setHeader('access-control-allow-methods', 'GET, OPTIONS');
+  res.setHeader('access-control-max-age', '600');
+  res.setHeader('cross-origin-resource-policy', 'cross-origin');
+  res.setHeader('vary', 'Origin');
+  if (req.headers['access-control-request-private-network'] === 'true') {
+    // Retain compatibility with Chromium's earlier Private Network Access
+    // preflight while the newer permission-based LNA rollout stabilizes.
+    res.setHeader('access-control-allow-private-network', 'true');
+  }
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'method not allowed' });
+    return;
+  }
+
+  const status = await handle('status', {});
+  sendJson(res, 200, hostedHealth(status));
+}
+
+function hostedHealth(value: unknown): Record<string, unknown> {
+  const status = record(value);
+  const capabilities = record(status.capabilities);
+  const health = record(status.health);
+  const components = record(health.components);
+  const safeComponents: Record<string, unknown> = {};
+
+  for (const name of HEALTH_COMPONENTS) {
+    const component = record(components[name]);
+    const state = stringValue(component.state);
+    const safeState = state && HEALTH_STATES.has(state) ? state : 'action-required';
+    const version = safeVersion(component.version);
+    safeComponents[name] = {
+      state: safeState,
+      message: componentMessage(name, safeState),
+      ...(version ? { version } : {}),
+    };
+  }
+
+  const mode = stringValue(capabilities.mode);
+  const overall = stringValue(health.overall);
+  const safeMode = ['live', 'navigation-only', 'offline'].includes(mode ?? '') ? mode! : 'offline';
+  const capabilityCopy = safeCapabilityCopy(safeMode);
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    privacy: 'No prompts, task names, task IDs, paths, configuration, or diagnostics are exposed.',
+    bridge: {
+      reachable: true,
+      version: bridgeVersion(),
+    },
+    capabilities: {
+      mode: safeMode,
+      label: capabilityCopy.label,
+      reason: capabilityCopy.reason,
+      canNavigateSessions: capabilities.canNavigateSessions === true,
+      canConfigure: capabilities.canConfigure === true,
+      canControlSessions: capabilities.canControlSessions === true,
+      canListSessions: capabilities.canListSessions === true,
+    },
+    health: {
+      overall: ['ready', 'degraded', 'action-required'].includes(overall ?? '')
+        ? overall
+        : 'action-required',
+      components: safeComponents,
+    },
+  };
+}
+
+function safeCapabilityCopy(mode: string): { label: string; reason: string } {
+  if (mode === 'live') {
+    return {
+      label: 'Live control',
+      reason: 'Codex Desktop and Stream Deck Micro are sharing live sessions.',
+    };
+  }
+  if (mode === 'navigation-only') {
+    return {
+      label: 'Navigation only',
+      reason: 'Saved task buttons can open Codex, but live controls and state sync are unavailable.',
+    };
+  }
+  return {
+    label: 'Offline',
+    reason: 'No live control or saved navigation bindings are currently available.',
+  };
+}
+
+function componentMessage(name: typeof HEALTH_COMPONENTS[number], state: string): string {
+  const available = state === 'ready' || state === 'navigation-only';
+  switch (name) {
+    case 'bridge':
+      return 'Local Micro bridge is responding.';
+    case 'surface':
+      return available ? 'The Stream Deck surface is connected.' : 'The Stream Deck surface needs attention.';
+    case 'plugin':
+      return state === 'not-required'
+        ? 'The Elgato plugin is not required in this edition.'
+        : available ? 'The Elgato plugin is communicating with Micro.' : 'The Elgato plugin is not communicating with Micro.';
+    case 'codexDesktop':
+      return state === 'ready'
+        ? 'Codex Desktop is connected for live control.'
+        : state === 'navigation-only' ? 'Codex remains private; saved buttons can still open its tasks.' : 'Codex Desktop needs attention.';
+    case 'sharedControl':
+      return state === 'ready'
+        ? 'Live prompts, state, focus, and attention sync are available.'
+        : 'Live session control is unavailable.';
+    case 'bindings':
+      return available ? 'Saved session buttons are available.' : 'No saved session buttons are available.';
+  }
+}
+
+function safeVersion(value: unknown): string | null {
+  const version = stringValue(value);
+  return version && /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}$/.test(version) ? version : null;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' ? value.slice(0, 500) : null;
+}
+
+let cachedBridgeVersion: string | null = null;
+
+function bridgeVersion(): string {
+  if (cachedBridgeVersion) return cachedBridgeVersion;
+  try {
+    const packageJson = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    ) as { version?: unknown };
+    cachedBridgeVersion = stringValue(packageJson.version) ?? 'development';
+  } catch {
+    cachedBridgeVersion = 'development';
+  }
+  return cachedBridgeVersion;
 }
 
 function renderAdminHtml(apiToken: string, nonce: string): string {
