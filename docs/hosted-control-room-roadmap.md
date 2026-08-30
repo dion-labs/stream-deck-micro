@@ -8,10 +8,11 @@ documentation, but it must not become a cloud relay or authority for local Codex
 sessions. Configuration, prompts, session identifiers, and action execution stay
 on the user's Mac.
 
-The local Micro bridge remains the source of truth. A hosted page may connect to
-it only after an explicit user gesture and short-lived pairing grant scoped to
-the exact Dion Labs origin. The existing localhost Control Room remains the
-fallback and recovery surface.
+The local Micro bridge remains the source of truth. A hosted page may request a
+minimal redacted health summary after an explicit user gesture and only from the
+exact Dion Labs origin. Any sensitive read or mutation additionally requires a
+short-lived pairing grant scoped to that origin. The existing localhost Control
+Room remains the fallback and recovery surface.
 
 ## Product principles
 
@@ -60,9 +61,9 @@ plugin, Codex Desktop, shared control, and saved bindings.
 - Read-only component health and version compatibility.
 - Clear fallback to **Open local Control Room**.
 
-Before implementation, spike Chrome and Safari behavior for an HTTPS origin
-calling an HTTP loopback service. Verify Local Network Access permission,
-mixed-content handling, CORS, preflight behavior, and denial/recovery UX.
+Phase 1A implements the redacted bridge contract and hosted setup prototype.
+The current browser findings, production validation gate, and fallback decision
+are recorded in [hosted-control-room-compatibility.md](hosted-control-room-compatibility.md).
 
 ### Phase 2 — paired local configuration
 

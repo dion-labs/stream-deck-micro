@@ -33,6 +33,7 @@
     "SECURITY.md",
     "docs/shared-server-hardening.md",
     "docs/hosted-control-room-roadmap.md",
+    "docs/hosted-control-room-compatibility.md",
     "config.example.json"
   ],
   "os": [

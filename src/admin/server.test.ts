@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { startAdminServer, type AdminServer } from './server.js';
+import { HOSTED_HEALTH_PATH, startAdminServer, type AdminServer } from './server.js';
 
 let server: AdminServer | null = null;
 
@@ -9,6 +9,35 @@ afterEach(async () => {
 });
 
 describe('Control Room server', () => {
+  function hostedStatus() {
+    const component = (state: string, message: string, extra = {}) => ({ state, message, ...extra });
+    return {
+      capabilities: {
+        mode: 'navigation-only',
+        label: 'Navigation only',
+        reason: 'Saved buttons can open Codex. SECRET-CAPABILITY-MESSAGE',
+        canNavigateSessions: true,
+        canConfigure: true,
+        canControlSessions: false,
+        canListSessions: false,
+        secretCapability: 'do not expose',
+      },
+      health: {
+        overall: 'degraded',
+        components: {
+          bridge: component('ready', 'Local Micro bridge is responding.'),
+          surface: component('ready', 'One Stream Deck is connected.'),
+          plugin: component('ready', 'Plugin connected. SECRET-COMPONENT-MESSAGE', { version: '0.1.0.5', token: 'secret' }),
+          codexDesktop: component('navigation-only', 'Codex remains private.'),
+          sharedControl: component('navigation-only', 'Live control is unavailable.'),
+          bindings: component('navigation-only', 'Six saved bindings loaded.'),
+        },
+      },
+      slots: [{ id: 'private-task', name: 'Private task', cwd: '/secret/path' }],
+      workflows: [{ prompt: 'secret prompt' }],
+    };
+  }
+
   it('serves a tokenized page with hardened response headers', async () => {
     server = await startAdminServer(0, async () => ({}));
     const response = await fetch(server.url);
@@ -25,6 +54,92 @@ describe('Control Room server', () => {
     server = await startAdminServer(0, async () => ({}));
     const response = await fetch(`${server.url}/api/status`);
     expect(response.status).toBe(401);
+  });
+
+  it('serves a redacted, read-only health contract to the exact hosted origin', async () => {
+    const calls: string[] = [];
+    server = await startAdminServer(0, async (cmd) => {
+      calls.push(cmd);
+      return hostedStatus();
+    });
+
+    const response = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, {
+      headers: { origin: 'https://deck.dionlabs.ai' },
+    });
+    const body = await response.json() as Record<string, unknown>;
+    const serialized = JSON.stringify(body);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://deck.dionlabs.ai');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(calls).toEqual(['status']);
+    expect(body).toMatchObject({
+      schemaVersion: 1,
+      bridge: { reachable: true, version: '0.1.0' },
+      capabilities: {
+        mode: 'navigation-only',
+        canNavigateSessions: true,
+        canControlSessions: false,
+      },
+      health: {
+        overall: 'degraded',
+        components: { plugin: { state: 'ready', version: '0.1.0.5' } },
+      },
+    });
+    expect(serialized).not.toContain('private-task');
+    expect(serialized).not.toContain('Private task');
+    expect(serialized).not.toContain('/secret/path');
+    expect(serialized).not.toContain('secret prompt');
+    expect(serialized).not.toContain('secretCapability');
+    expect(serialized).not.toContain('token');
+    expect(serialized).not.toContain('SECRET-CAPABILITY-MESSAGE');
+    expect(serialized).not.toContain('SECRET-COMPONENT-MESSAGE');
+  });
+
+  it('supports the local development origin and legacy private-network preflight', async () => {
+    let calls = 0;
+    server = await startAdminServer(0, async () => {
+      calls += 1;
+      return hostedStatus();
+    });
+
+    const preflight = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, {
+      method: 'OPTIONS',
+      headers: {
+        origin: 'http://127.0.0.1:5173',
+        'access-control-request-private-network': 'true',
+      },
+    });
+
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get('access-control-allow-origin')).toBe('http://127.0.0.1:5173');
+    expect(preflight.headers.get('access-control-allow-private-network')).toBe('true');
+    expect(calls).toBe(0);
+  });
+
+  it('rejects untrusted hosted origins before reading daemon status', async () => {
+    let called = false;
+    server = await startAdminServer(0, async () => {
+      called = true;
+      return hostedStatus();
+    });
+
+    const response = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, {
+      headers: { origin: 'https://malicious.example' },
+    });
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(called).toBe(false);
+  });
+
+  it('does not expose a mutation method on the hosted endpoint', async () => {
+    server = await startAdminServer(0, async () => hostedStatus());
+    const response = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, {
+      method: 'POST',
+      headers: { origin: 'https://deck.dionlabs.ai' },
+    });
+    expect(response.status).toBe(405);
   });
 
   it('rejects cross-origin mutation attempts', async () => {
