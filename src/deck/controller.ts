@@ -5,6 +5,7 @@ import {
   type DeckSettings,
 } from '../config.js';
 import type { AgentSlotSnapshot } from '../core/types.js';
+import type { CapabilityMode } from '../runtimeStatus.js';
 import {
   ACTION_KEYS_STYLE,
   DO_IT_STYLE,
@@ -24,11 +25,15 @@ export interface DeckEvents {
   mode: (mode: DeckMode) => void;
   /** The user explicitly requested a graceful Codex Desktop restart. */
   restartCodex: () => void;
+  /** The user explicitly requested removal of shared mode and a private restart. */
+  recoverCodex: () => void;
 }
 
 export type DeckMode = 'awake' | 'attention' | 'asleep';
 export type AttentionState = 'done' | 'error';
-export type DesktopRecoveryState = 'restart-required' | 'restarting' | 'update-required' | 'updating';
+export type DesktopRecoveryState =
+  | 'restart-required' | 'restarting' | 'update-required' | 'updating'
+  | 'shared-error' | 'recovering-private' | 'private-ready';
 
 export interface DeckStatus {
   mode: DeckMode;
@@ -37,6 +42,15 @@ export interface DeckStatus {
   attention: { index: number; state: AttentionState; sessionId: string | null }[];
   autoSleepDueAt: number | null;
   desktopRecovery: DesktopRecoveryState | null;
+  capabilityMode: CapabilityMode;
+  actionFeedback: ActionFeedback | null;
+}
+
+export interface ActionFeedback {
+  keyIndex: number;
+  outcome: 'blocked' | 'failed';
+  message: string;
+  expiresAt: number;
 }
 
 export interface DeckDriver {
@@ -54,6 +68,7 @@ export interface DeckDriver {
 
 const PULSE_INTERVAL_MS = 450;
 const RECOVERY_KEY_INDEX = 7;
+const SHARED_RETRY_KEY_INDEX = 6;
 
 /**
  * Owns the physical Stream Deck: renders slots/actions onto keys, runs the
@@ -75,6 +90,9 @@ export class DeckController {
   private sleepTimer: NodeJS.Timeout | null = null;
   private autoSleepDueAt: number | null = null;
   private desktopRecovery: DesktopRecoveryState | null = null;
+  private capabilityMode: CapabilityMode = 'offline';
+  private actionFeedback: ActionFeedback | null = null;
+  private feedbackTimer: NodeJS.Timeout | null = null;
 
   constructor(
     device: DeckDriver,
@@ -147,7 +165,35 @@ export class DeckController {
       })),
       autoSleepDueAt: this.autoSleepDueAt,
       desktopRecovery: this.desktopRecovery,
+      capabilityMode: this.capabilityMode,
+      actionFeedback: this.actionFeedback ? { ...this.actionFeedback } : null,
     };
+  }
+
+  setCapabilityMode(mode: CapabilityMode): void {
+    if (mode === this.capabilityMode) return;
+    this.capabilityMode = mode;
+    if (this.mode === 'awake' && !this.desktopRecovery) this.repaintAll();
+  }
+
+  showActionFeedback(action: KeyAction, outcome: ActionFeedback['outcome'], message: string): void {
+    const keyIndex = [...this.actions()].find(([, candidate]) => actionIdentity(candidate) === actionIdentity(action))?.[0];
+    if (keyIndex === undefined) return;
+    if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
+    this.actionFeedback = { keyIndex, outcome, message, expiresAt: Date.now() + 1_400 };
+    if (this.mode === 'awake' && !this.desktopRecovery) {
+      this.device.fillImage(
+        keyIndex,
+        renderActionKey(outcome === 'blocked' ? 'BLOCKED' : 'FAILED', [105, 45, 76], message.slice(0, 12)),
+        { format: 'rgba' },
+      );
+    }
+    this.feedbackTimer = setTimeout(() => {
+      this.feedbackTimer = null;
+      this.actionFeedback = null;
+      if (this.mode === 'awake' && !this.desktopRecovery) this.repaintAll();
+    }, 1_400);
+    this.feedbackTimer.unref?.();
   }
 
   /** Temporarily replace the normal surface with one central recovery action. */
@@ -278,6 +324,7 @@ export class DeckController {
       72,
       this.pulsePhase,
       this.attention.get(snapshot.index),
+      this.capabilityMode === 'navigation-only' && snapshot.state !== 'empty',
     );
     this.device.fillImage(key, buffer, { format: 'rgba' });
   }
@@ -289,12 +336,13 @@ export class DeckController {
         const workflow = this.workflows.find((candidate) => candidate.id === action.id);
         if (!workflow) continue;
         const doIt = workflow.id === 'do-it';
+        const controlUnavailable = this.capabilityMode !== 'live';
         this.device.fillImage(
           key,
           renderActionKey(
             doIt ? DO_IT_STYLE.title : workflow.name.slice(0, 10),
-            doIt ? DO_IT_STYLE.color : [55, 65, 110],
-            doIt ? undefined : workflow.id,
+            controlUnavailable ? [62, 48, 72] : doIt ? DO_IT_STYLE.color : [55, 65, 110],
+            controlUnavailable ? 'LIVE OFF' : doIt ? undefined : workflow.id,
           ),
           { format: 'rgba' },
         );
@@ -302,9 +350,13 @@ export class DeckController {
       }
       const style = ACTION_KEYS_STYLE[action.kind];
       const isAutoSleep = action.kind === 'sleep' && this.settings.sleepKey === 'toggle-auto';
+      const controlUnavailable = this.capabilityMode !== 'live'
+        && (action.kind === 'stop' || action.kind === 'attach');
       this.device.fillImage(
         key,
-        isAutoSleep
+        controlUnavailable
+          ? renderActionKey(style.title, [62, 48, 72], 'LIVE OFF')
+          : isAutoSleep
           ? renderActionKey('AUTO', this.settings.autoSleep.enabled ? [48, 78, 66] : [55, 58, 66], this.settings.autoSleep.enabled ? 'ON' : 'OFF')
           : renderActionKey(style.title, style.color),
         { format: 'rgba' },
@@ -345,8 +397,10 @@ export class DeckController {
 
   private onDown(keyIndex: number): void {
     if (this.desktopRecovery) {
-      if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'update-required'].includes(this.desktopRecovery)) {
+      if (keyIndex === SHARED_RETRY_KEY_INDEX && ['restart-required', 'update-required'].includes(this.desktopRecovery)) {
         this.emitter.emit('restartCodex');
+      } else if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'update-required', 'shared-error'].includes(this.desktopRecovery)) {
+        this.emitter.emit('recoverCodex');
       }
       return;
     }
@@ -373,13 +427,23 @@ export class DeckController {
     if (this.desktopRecovery) {
       const restarting = this.desktopRecovery === 'restarting';
       const updating = this.desktopRecovery === 'updating';
-      const busy = restarting || updating;
+      const recoveringPrivate = this.desktopRecovery === 'recovering-private';
+      const privateReady = this.desktopRecovery === 'private-ready';
+      const canRetryShared = ['restart-required', 'update-required'].includes(this.desktopRecovery);
+      const busy = restarting || updating || recoveringPrivate;
+      if (canRetryShared) {
+        this.device.fillImage(
+          SHARED_RETRY_KEY_INDEX,
+          renderActionKey(this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY', [180, 108, 20], 'SHARED'),
+          { format: 'rgba' },
+        );
+      }
       this.device.fillImage(
         RECOVERY_KEY_INDEX,
         renderActionKey(
-          updating ? 'UPDATING' : restarting ? 'OPENING' : this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RESTART',
-          busy ? [62, 74, 96] : [180, 108, 20],
-          'CODEX',
+          updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER',
+          privateReady ? [37, 108, 72] : busy ? [62, 74, 96] : [18, 98, 127],
+          privateReady ? 'PRIVATE' : 'CODEX',
         ),
         { format: 'rgba' },
       );
@@ -445,6 +509,9 @@ export class DeckController {
   close(): void {
     this.stopPulse();
     this.clearSleepTimer();
+    if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
+    this.feedbackTimer = null;
+    this.actionFeedback = null;
     this.emitter.removeAllListeners();
     try {
       this.device.close();
@@ -452,6 +519,14 @@ export class DeckController {
       // device may already be gone
     }
   }
+}
+
+function actionIdentity(action: KeyAction): string {
+  return action.kind === 'slot'
+    ? `slot:${action.index}`
+    : action.kind === 'workflow'
+      ? `workflow:${action.id}`
+      : action.kind;
 }
 
 function cloneSettings(settings: DeckSettings): DeckSettings {

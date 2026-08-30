@@ -90,6 +90,27 @@ describe('Control Room server', () => {
     expect(html).toContain('Update shared Codex backend');
     expect(html).toContain('may interrupt active turns');
     expect(html).toContain("recovery === 'updating'");
+    expect(html).toContain("api('desktop/recover'");
+    expect(html).toContain("recovery === 'private-ready'");
+    expect(html).toContain('stop verified leftover listeners');
+    expect(html).toContain('navigation only');
+    expect(html).toContain('Copy diagnostics');
+    expect(html).toContain("api('diagnostics')");
+    expect(html).toContain('canControlSessions');
+    expect(html).toContain("Selected key · K' + (selectedKeyIndex + 1)");
+  });
+
+  it('serves redacted diagnostics as a read-only API', async () => {
+    server = await startAdminServer(0, async (cmd) => ({ cmd, privacy: 'redacted' }));
+    const page = await fetch(server.url);
+    const html = await page.text();
+    const token = html.match(/meta name="sdm-api-token" content="([^"]+)"/)?.[1];
+
+    const response = await fetch(`${server.url}/api/diagnostics`, {
+      headers: { 'x-stream-deck-micro-token': token as string },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ cmd: 'diagnostics', privacy: 'redacted' });
   });
 
   it('forwards a targeted replacement attachment to the daemon', async () => {

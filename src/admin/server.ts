@@ -93,7 +93,7 @@ async function route(
       return;
     }
     const cmd = apiMatch[1];
-    const allowedGet = ['status', 'sessions', 'workflows.get', 'deck.settings.get'];
+    const allowedGet = ['status', 'diagnostics', 'sessions', 'workflows.get', 'deck.settings.get'];
     if (req.method === 'GET' && !allowedGet.includes(cmd)) {
       sendJson(res, 405, { error: 'method not allowed' });
       return;

@@ -34,8 +34,8 @@ Micro connect to one local WebSocket App Server, so both can read and control
 the same session without competing for its writer lock.
 
 ```text
-Codex Desktop ───────────────┐
-                            ├── ws://127.0.0.1:17532 ── Codex sessions
+Codex Desktop ─ stdio shim ─┐
+                            ├── authenticated loopback App Server ── shared sessions
 Marketplace plugin ─ bridge ┤
 Independent HID ──── bridge ┘
 ```
@@ -98,8 +98,9 @@ Accept the profile import in the Elgato app. The released Marketplace package
 will prompt to install this profile automatically; the explicit `open` command
 is only needed for source-linked development installs.
 
-`marketplace install` also installs shared Codex mode, selects the Marketplace
-surface in the config, and starts a per-user LaunchAgent. Inspect it at any time:
+`marketplace install` selects the Marketplace surface and starts its per-user
+LaunchAgent. It does **not** install, activate, or restart Codex shared mode.
+Set that up separately using the instructions below. Inspect the bridge at any time:
 
 ```bash
 stream-deck-micro marketplace status
@@ -118,36 +119,70 @@ stream-deck-micro doctor
 stream-deck-micro start
 ```
 
-After `shared install`, fully quit Codex Desktop with **Codex → Quit Codex** and
-open it again. Closing only the window is not enough. This one-time restart
-makes Desktop inherit the shared App Server endpoint.
+### Shared control: verified, scoped launch
 
-At login, Stream Deck Micro waits until Desktop is connected to that shared
-endpoint before restoring or attaching any session. If Desktop wins the startup
-race with a private server, Micro keeps the saved bindings untouched and replaces
-the deck with one central **RESTART CODEX** key. Pressing it gracefully quits and
-reopens Desktop, then restores the saved session buttons after shared control
-reconnects. The same recovery action appears in Control Room's Live mode.
+`shared install` runs an isolated, prompt-free compatibility probe and prepares
+a launcher. It does **not** quit Desktop or activate shared mode. At a safe
+stopping point, fully quit Codex Desktop, then run:
 
-Micro also checks the managed shared backend against Desktop's installed Codex
-version every 15 seconds. If an app update leaves an older backend running, only
-the central **UPDATE CODEX** key remains visible. Press it when active tasks are
-at a safe stopping point: it quits Desktop, restarts Micro's managed backend
-using the already-installed executable, reopens Desktop, and restores your saved
-session bindings, labels, selection, and attention. No download is performed.
-The key shows **UPDATING CODEX** during recovery and returns to **UPDATE CODEX**
-if recovery fails, with the error available in Control Room. Recovery is never
-started automatically, and custom/unmanaged servers are not restarted.
+```bash
+stream-deck-micro shared open
+```
 
-The installer:
+Desktop launches its bundled server through Micro's transport adapter. Desktop's
+complete startup arguments and environment—including its per-launch app-tools
+connection—are forwarded, rather than copied into a separately managed server.
+Both clients still control the same sessions. The listener uses a locally stored
+bearer token; it is never exposed beyond `127.0.0.1`.
 
-- starts a loopback-only Codex App Server at `ws://127.0.0.1:17532`;
-- keeps it running with a per-user macOS LaunchAgent;
-- points Codex Desktop and Stream Deck Micro at that endpoint;
-- updates the selected project configuration without discarding other settings.
+**Normal Dock/Spotlight launches remain private.** To use Micro after quitting
+Desktop or rebooting, use `shared open` again. With verified setup, the deck's
+explicit **RETRY SHARED** action can also switch a running private Desktop into
+shared control. This interrupts active tasks, so use it only at a safe stopping
+point. Micro never switches or restarts Desktop automatically.
+
+If shared control is unhealthy, the recovery surface offers two deliberately
+different choices. **RETRY SHARED** attempts the verified integration again.
+The prominent **RECOVER CODEX** escape hatch prioritizes Desktop availability:
+it gracefully quits ChatGPT, removes Micro's shared routing, stops only bundled
+Codex processes verified to be listening on Micro's exact loopback endpoint,
+and reopens ChatGPT in private stdio mode. Saved deck bindings are preserved,
+but Micro stays paused until shared mode is investigated and explicitly set up
+again. The same action is available from Control Room and Terminal:
+
+```bash
+stream-deck-micro shared recover ./config.json
+```
+
+Recovery may interrupt active turns. It never kills by process name, port alone,
+or an unverified executable, and it re-checks command identity before escalating
+from graceful termination.
+
+The installed Desktop application and server are fingerprinted. If either
+changes, shared launch falls back to Desktop's native private server. The deck
+cannot approve an unverified update: first quit Desktop, run `shared install`
+again to verify the new build, then `shared open`. A version/health response
+alone is not considered compatibility proof.
+
+If shared startup fails before a request is forwarded, the adapter falls back
+to native stdio. Once a request has been forwarded, it is **never replayed**;
+a later failure can require a clean Desktop relaunch. Shared control stays
+disabled until explicitly reverified. Your saved session assignments are kept.
+
+Read [the hardening design and validation limits](docs/shared-server-hardening.md)
+before enabling this experimental integration. The probe does not replace a
+real Desktop app-tools and physical-deck acceptance test.
 
 The deck daemon prints the local Control Room URL when it starts. By default it
 is `http://127.0.0.1:17531`.
+
+The local Control Room now reports whether Micro has **Live control**,
+**Navigation only**, or is **Offline**, together with component-level bridge,
+surface, plugin, Codex, control, and binding health. Its redacted diagnostic
+report intentionally omits prompts, task names and IDs, paths, and configuration
+values. The staged design for moving onboarding to Dion Labs without turning it
+into a cloud control plane is recorded in the
+[Hosted Control Room roadmap](docs/hosted-control-room-roadmap.md).
 
 Check or completely remove the integration at any time:
 
@@ -156,11 +191,19 @@ stream-deck-micro shared status
 stream-deck-micro shared uninstall
 ```
 
-After uninstalling, fully quit and reopen Codex Desktop. The uninstall command
-stops the shared server, removes both LaunchAgents, clears Desktop routing, and
-removes only the shared endpoint from the Stream Deck Micro configuration.
+After uninstalling, fully quit and reopen Codex Desktop from Dock/Spotlight.
+Uninstall removes Micro's install state, legacy shared-server/environment
+LaunchAgents and global routing, and only the shared endpoint from Micro's
+configuration. It does not quit Desktop or discard your session bindings. A
+small native-passthrough launcher is retained so a running Desktop is not left
+referencing a missing executable. Legacy server removal can interrupt its tasks.
 Removing the Marketplace bridge does not remove shared mode, because the
 Independent edition uses the same shared server.
+
+For an installation made before this hardening, finish active tasks, quit
+Desktop, run `shared uninstall`, then `shared install` and `shared open`.
+Quit/reopen any terminal or editor that inherited the old
+`CODEX_APP_SERVER_WS_URL`; otherwise it may still launch apps with stale routing.
 
 ## Configure
 
@@ -371,9 +414,11 @@ machine.
   brightness; the Independent edition provides true brightness-zero sleep.
 - The Elgato application must be closed only while the Independent edition owns
   the device.
-- Codex Desktop must be fully restarted after shared mode is installed or
-  removed. Micro detects private-server startup races, leaves session writers
-  untouched, and offers a one-key graceful Desktop restart.
+- Shared control requires a scoped `shared open` launch; normal Desktop launches
+  stay private. A Desktop update disables shared control until reverified.
+- WebSocket transport is experimental. New/resumed sessions and Desktop tools
+  must be retested after integration changes; compatibility is not guaranteed
+  for every future Desktop release.
 - There is no approval, voice, reasoning-effort, or new-chat key in v1.
 - Codex App Server does not currently expose Desktop's unread state. Shared mode
   therefore mirrors Codex Desktop's read-only persisted notification-dot state

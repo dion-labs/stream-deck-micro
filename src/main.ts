@@ -15,6 +15,7 @@ import {
   type SurfaceMode,
 } from './config.js';
 import { SlotManager } from './core/slotManager.js';
+import { DetachedSession } from './core/detachedSession.js';
 import type { AgentSession, AgentSlotSnapshot } from './core/types.js';
 import { openCodexThread } from './codexDesktop.js';
 import { SharedServerVersionMonitor } from './serverUpdate.js';
@@ -29,16 +30,24 @@ import {
   CodexUnreadMonitor,
 } from './harness/codex-app-server/unread.js';
 import { DeckController, type AttentionState } from './deck/controller.js';
+import type { KeyAction } from './deck/layout.js';
 import { VirtualDeckDriver } from './deck/virtualDriver.js';
 import { serveIpc } from './ipc.js';
 import { startAdminServer, type AdminServer } from './admin/server.js';
 import { macNotificationArgs } from './notifications.js';
+import { desktopRecoveryState } from './desktopRecovery.js';
 import {
   desktopConnectionStatus,
-  restartCodexDesktop,
-  restartManagedDesktopServer,
+  recoverPrivateCodex,
+  restartSharedCodexDesktop,
+  assertSharedLaunchCompatible,
+  DEFAULT_SHARED_SERVER_URL,
   type DesktopConnectionStatus,
 } from './sharedServer.js';
+import {
+  deriveRuntimeStatus,
+  type MarketplacePluginHeartbeat,
+} from './runtimeStatus.js';
 
 interface PersistedState {
   slots: {
@@ -138,10 +147,12 @@ export async function runDaemon(
 ): Promise<void> {
   const { config, sourcePath } = loadConfig(explicitConfigPath);
   const surfaceMode = options.surfaceMode ?? config.surface.mode;
+  // Missing/removed shared setup must never create a Micro-owned backend.
+  const sharedEndpoint = config.appServer.url ?? DEFAULT_SHARED_SERVER_URL;
   const adapter = new AppServerAdapter({
     approvalPolicy: config.codex.approvalPolicy,
     sandbox: config.codex.sandboxMode,
-    endpoint: config.appServer.url,
+    endpoint: sharedEndpoint,
   });
   const appServer = adapter;
   const manager = new SlotManager(adapter, {
@@ -164,7 +175,6 @@ export async function runDaemon(
   // daemon-internal errors (failed sends etc.) are logged; failures also reach the key via turn-failed
   const log = (...args: unknown[]) => console.log(new Date().toISOString(), ...args);
   let persisted = loadState();
-  const sharedEndpoint = config.appServer.url;
   const serverVersions = sharedEndpoint ? new SharedServerVersionMonitor(sharedEndpoint) : null;
   let desktopConnection: DesktopConnectionStatus = sharedEndpoint
     ? desktopConnectionStatus(sharedEndpoint)
@@ -179,16 +189,28 @@ export async function runDaemon(
   let desktopRestartPromise: Promise<void> | null = null;
   let serverUpdating = false;
   let serverUpdateError: string | null = null;
+  let privateRecoveryPromise: Promise<void> | null = null;
+  let privateRecoveryComplete = false;
+  let privateRecoveryError: string | null = null;
   let desktopRefreshPromise: Promise<void> | null = null;
+  let desktopGeneration: string | undefined;
+  let detachedBindingsLoaded = false;
   const unreadAttentionSync = new CodexUnreadAttentionSync();
   const unreadMonitor = sharedEndpoint ? new CodexUnreadMonitor() : null;
   const desktopFocusMonitor = sharedEndpoint ? new CodexDesktopFocusMonitor() : null;
   let desktopFocusedThreadId: string | null = null;
+  let marketplacePluginHeartbeat: MarketplacePluginHeartbeat | null = null;
+  const actionEvents: {
+    at: number;
+    action: string;
+    outcome: 'accepted' | 'blocked' | 'failed';
+    reason?: string;
+  }[] = [];
 
   const persistState = () => {
     // Do not replace saved bindings with an empty startup snapshot while
     // Desktop is still joining the shared server.
-    if (stateHydrated) saveState(manager, config.slots.cwd, deck);
+    if (stateHydrated || detachedBindingsLoaded) saveState(manager, config.slots.cwd, deck);
   };
 
   function assertDesktopReady(): void {
@@ -197,7 +219,109 @@ export async function runDaemon(
       throw new Error('Update the shared Codex backend using the central UPDATE CODEX button first. This may interrupt active turns.');
     }
     if (desktopConnection.state !== 'connected') throw new Error(desktopConnection.message);
+    if (appServer.transportClosed) throw new Error('Micro lost its shared connection and is reconnecting. No action was sent.');
     if (!stateHydrated) throw new Error('Shared control is connected; session bindings are still restoring.');
+  }
+
+  function runtimeStatus() {
+    return deriveRuntimeStatus({
+      now: Date.now(),
+      surface: surfaceMode,
+      desktopState: desktopConnection.state,
+      desktopMessage: desktopConnection.message,
+      sessionsReady: stateHydrated,
+      transportClosed: appServer.transportClosed,
+      assignedBindings: manager.snapshots().filter((snapshot) => snapshot.sessionId !== null).length,
+      pluginHeartbeat: marketplacePluginHeartbeat,
+    });
+  }
+
+  function syncCapabilitySurface(): ReturnType<typeof runtimeStatus> {
+    const runtime = runtimeStatus();
+    deck.setCapabilityMode(runtime.capabilities.mode);
+    return runtime;
+  }
+
+  function actionName(action: KeyAction): string {
+    return action.kind === 'slot'
+      ? `slot:${action.index + 1}`
+      : action.kind === 'workflow'
+        ? `workflow:${action.id}`
+        : action.kind;
+  }
+
+  function recordAction(
+    action: KeyAction,
+    outcome: 'accepted' | 'blocked' | 'failed',
+    reason?: string,
+  ): void {
+    const event = { at: Date.now(), action: actionName(action), outcome, ...(reason ? { reason } : {}) };
+    actionEvents.push(event);
+    if (actionEvents.length > 50) actionEvents.shift();
+    console.log(JSON.stringify({ component: 'surface', event: 'action', ...event }));
+    if (outcome !== 'accepted') {
+      deck.showActionFeedback(action, outcome, outcome === 'blocked' ? 'LIVE OFF' : 'TRY AGAIN');
+    }
+  }
+
+  function daemonStatus() {
+    const runtime = syncCapabilitySurface();
+    return {
+      selectedIndex: manager.selectedIndex,
+      harness: adapter.name,
+      surface: surfaceMode,
+      capabilities: runtime.capabilities,
+      health: runtime.health,
+      slots: manager.snapshots(),
+      workflows: config.workflows,
+      deck: deck.status(),
+      desktop: {
+        ...desktopConnection,
+        sessionsReady: stateHydrated,
+        restoreError,
+        serverVersions: serverVersions?.status ?? null,
+        serverUpdating,
+        serverUpdateError,
+        privateRecoveryComplete,
+        privateRecoveryError,
+      },
+    };
+  }
+
+  function diagnostics() {
+    const status = daemonStatus();
+    return {
+      schemaVersion: 1,
+      generatedAt: new Date().toISOString(),
+      runtime: {
+        platform: process.platform,
+        node: process.version,
+        surface: surfaceMode,
+        capabilities: status.capabilities,
+        health: status.health,
+      },
+      codex: {
+        connectionState: desktopConnection.state,
+        sessionsReady: stateHydrated,
+        transportClosed: appServer.transportClosed,
+        restoreError: restoreError ? 'Session restoration failed; see the local bridge log for details.' : null,
+        serverVersions: serverVersions?.status ?? null,
+      },
+      deck: {
+        mode: status.deck.mode,
+        assignedBindings: manager.snapshots().filter((snapshot) => snapshot.sessionId !== null).length,
+        configuredKeys: status.deck.layout.length,
+        attentionCount: status.deck.attention.length,
+      },
+      marketplace: marketplacePluginHeartbeat,
+      recentActions: actionEvents.map(({ at, action, outcome, reason }) => ({
+        at,
+        action,
+        outcome,
+        ...(reason ? { reason: 'Details retained only in the local bridge log.' } : {}),
+      })),
+      privacy: 'Prompt text, task names, task IDs, working directories, and configuration values are omitted.',
+    };
   }
 
   function needsServerUpdate(): boolean {
@@ -263,14 +387,32 @@ export async function runDaemon(
       // The detailed failure is logged and the recovery key is restored.
     });
   });
+  deck.on('recoverCodex', () => {
+    void beginPrivateRecovery().catch(() => {
+      // The detailed failure is logged and the recovery key remains available.
+    });
+  });
   deck.on('action', (action) => {
     switch (action.kind) {
       case 'slot':
         // empty slots are inert: sessions are created elsewhere and pulled in via ATTACH
-        if (manager.snapshot(action.index).state !== 'empty') openSlotInCodex(action.index);
+        if (manager.snapshot(action.index).state !== 'empty') {
+          openSlotInCodex(action.index);
+          recordAction(action, 'accepted');
+        } else {
+          recordAction(action, 'blocked', 'empty slot');
+        }
         break;
       case 'stop':
-        manager.interrupt();
+        try {
+          assertDesktopReady();
+          manager.interrupt();
+          recordAction(action, 'accepted');
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          recordAction(action, 'blocked', reason);
+          log('stop blocked:', reason);
+        }
         break;
       case 'sleep':
         if (config.deck.sleepKey === 'sleep') {
@@ -281,19 +423,32 @@ export async function runDaemon(
           deck.setSettings(config.deck);
           log(`auto sleep ${config.deck.autoSleep.enabled ? 'enabled' : 'disabled'} — saved to ${path}`);
         }
+        recordAction(action, 'accepted');
         break;
-      case 'attach':
-        void attachNewest().catch((e) => log('attach failed:', String(e)));
+      case 'attach': {
+        try {
+          assertDesktopReady();
+          recordAction(action, 'accepted');
+          void attachNewest().catch((error) => {
+            recordAction(action, 'failed', error instanceof Error ? error.message : String(error));
+          });
+        } catch (error) {
+          recordAction(action, 'blocked', error instanceof Error ? error.message : String(error));
+        }
         break;
+      }
       case 'workflow': {
         const workflow = config.workflows.find((w) => w.id === action.id);
         if (!workflow) break;
         try {
           assertDesktopReady();
         } catch (error) {
-          log('workflow blocked:', error instanceof Error ? error.message : String(error));
+          const reason = error instanceof Error ? error.message : String(error);
+          recordAction(action, 'blocked', reason);
+          log('workflow blocked:', reason);
           break;
         }
+        recordAction(action, 'accepted');
         manager.sendSelected(workflow.prompt).catch((e) => log('workflow failed:', String(e)));
         break;
       }
@@ -331,8 +486,9 @@ export async function runDaemon(
             log(`slot ${slot.index + 1}: writer held elsewhere → monitor-only`);
           } else {
             log(`resume slot ${slot.index} failed:`, String(e));
-            if (serverUpdating) throw e;
-            continue;
+            // A transient backend failure must never overwrite saved bindings
+            // with a partially restored (or empty) deck.
+            throw e;
           }
         }
         restoredSessionIds.add(slot.sessionId);
@@ -366,6 +522,7 @@ export async function runDaemon(
     restoreError = null;
     if (persisted?.attention?.length) deck.restoreAttention(persisted.attention);
     deck.render(manager.snapshots(), manager.selectedIndex);
+    syncCapabilitySurface();
     syncDesktopFocus();
     persistState();
     log('session bindings ready');
@@ -398,27 +555,80 @@ export async function runDaemon(
       return;
     }
     const next = desktopConnectionStatus(sharedEndpoint);
+    if (stateHydrated && (next.state !== 'connected' || appServer.transportClosed)) {
+      persistState();
+      persisted = loadState() ?? persisted;
+      stateHydrated = false;
+      restorePromise = null;
+    }
+    if (next.state === 'connected' && (next.generation !== desktopGeneration || appServer.transportClosed)) {
+      persistState();
+      persisted = loadState() ?? persisted;
+      stateHydrated = false;
+      restorePromise = null;
+      appServer.reconnect();
+      desktopGeneration = next.generation;
+    }
     if (next.state !== desktopConnection.state) {
       log(`desktop shared control → ${next.state}`);
     }
     desktopConnection = next;
-    await serverVersions?.refresh();
-    if (next.state === 'connected' && !needsServerUpdate()) await ensureSessionsHydrated();
-    syncDesktopRecoverySurface();
+    try {
+      await serverVersions?.refresh();
+      if (next.state === 'connected' && !needsServerUpdate()) await ensureSessionsHydrated();
+    } finally {
+      // Restore failures are themselves a recovery state. Never skip the
+      // escape hatch just because hydration threw before the next poll.
+      syncDesktopRecoverySurface();
+      syncCapabilitySurface();
+    }
   }
 
   function syncDesktopRecoverySurface(): void {
-    deck.setDesktopRecovery(
-      serverUpdating
-        ? 'updating'
-        : needsServerUpdate()
-          ? 'update-required'
-          : desktopRestartPromise
-            ? 'restarting'
-            : desktopConnection.state === 'restart-required'
-              ? 'restart-required'
-              : null,
-    );
+    deck.setDesktopRecovery(desktopRecoveryState({
+      privateRecovering: privateRecoveryPromise !== null,
+      privateComplete: privateRecoveryComplete,
+      serverUpdating,
+      updateRequired: needsServerUpdate(),
+      sharedRestarting: desktopRestartPromise !== null,
+      connectionState: desktopConnection.state,
+      restoreError,
+      privateRecoveryError,
+    }));
+  }
+
+  function beginPrivateRecovery(): Promise<void> {
+    if (privateRecoveryPromise) return privateRecoveryPromise;
+    if (privateRecoveryComplete) return Promise.resolve();
+    if (!sharedEndpoint) return Promise.reject(new Error('No shared Codex endpoint is configured'));
+    if (stateHydrated) persistState();
+    persisted = loadState() ?? persisted;
+    stateHydrated = false;
+    restorePromise = null;
+    privateRecoveryError = null;
+    // Release Micro's own writer/subscriptions before stopping the backend.
+    appServer.dispose();
+    privateRecoveryPromise = (async () => {
+      log('Private Codex recovery requested; disabling shared mode');
+      await recoverPrivateCodex(sourcePath ?? undefined, sharedEndpoint);
+      privateRecoveryComplete = true;
+      desktopConnection = {
+        state: 'unavailable', endpoint: null,
+        message: 'Codex Desktop is running privately. Micro shared control is disabled.',
+      };
+      restoreError = null;
+      serverUpdateError = null;
+      log('Codex Desktop recovered in private mode; Micro shared control is disabled');
+    })().catch((error) => {
+      privateRecoveryError = error instanceof Error ? error.message : String(error);
+      log('Private Codex recovery failed:', privateRecoveryError);
+      throw error;
+    }).finally(() => {
+      privateRecoveryPromise = null;
+      syncDesktopRecoverySurface();
+    });
+    syncDesktopRecoverySurface();
+    return privateRecoveryPromise;
   }
 
   function beginDesktopRestart(): Promise<void> {
@@ -430,7 +640,7 @@ export async function runDaemon(
     desktopRestartPromise = (async () => {
       syncDesktopRecoverySurface();
       log('Codex Desktop restart requested from the deck');
-      await restartCodexDesktop();
+      await restartSharedCodexDesktop(sharedEndpoint);
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await refreshDesktopConnection();
         if (desktopConnection.state === 'connected' && stateHydrated) {
@@ -459,6 +669,12 @@ export async function runDaemon(
     if (!sharedEndpoint || !serverVersions || !needsServerUpdate()) {
       return Promise.reject(new Error('The managed shared server does not need an update'));
     }
+    // Compatibility is checked before quitting Desktop or changing bindings.
+    return assertSharedLaunchCompatible(sharedEndpoint).then(() => performServerUpdate());
+  }
+
+  function performServerUpdate(): Promise<void> {
+    if (desktopRestartPromise) return desktopRestartPromise;
     // Snapshot the latest bindings, not just the configuration present at boot.
     persistState();
     persisted = loadState() ?? persisted;
@@ -471,11 +687,9 @@ export async function runDaemon(
       // Let any read-only status probe finish before replacing the backend.
       await desktopRefreshPromise;
       log('Shared Codex backend update requested; active turns may be interrupted');
-      await restartCodexDesktop(undefined, 40, async () => {
-        await restartManagedDesktopServer(sharedEndpoint);
-        appServer.reconnect();
-      });
-      const versions = await serverVersions.refresh(true);
+      await restartSharedCodexDesktop(sharedEndpoint);
+      appServer.reconnect();
+      const versions = await serverVersions!.refresh(true);
       if (versions.state !== 'current') throw new Error('The shared backend has not picked up the installed Codex version; press UPDATE CODEX to retry.');
       for (let attempt = 0; attempt < 40; attempt += 1) {
         desktopConnection = desktopConnectionStatus(sharedEndpoint);
@@ -499,7 +713,33 @@ export async function runDaemon(
     return desktopRestartPromise;
   }
 
+  /**
+   * Keep saved task buttons visible while Codex runs privately or shared
+   * control is reconnecting. These bindings support Desktop navigation only;
+   * hydration replaces them with live sessions once the App Server is ready.
+   */
+  function restoreDetachedBindings(): void {
+    if (!persisted) return;
+    const configuredSlots = new Set(assignedSlotIndexes());
+    const restoredSessionIds = new Set<string>();
+    for (const slot of persisted.slots) {
+      if (slot.index >= config.slots.count || !configuredSlots.has(slot.index)) continue;
+      if (restoredSessionIds.has(slot.sessionId)) continue;
+      manager.attachSession(
+        slot.index,
+        new DetachedSession(slot.sessionId, slot.label),
+        slot.label,
+      );
+      restoredSessionIds.add(slot.sessionId);
+      if (slot.customLabel) manager.rename(slot.index, slot.customLabel);
+    }
+    detachedBindingsLoaded = restoredSessionIds.size > 0;
+    if (configuredSlots.has(persisted.selectedIndex)) manager.select(persisted.selectedIndex);
+  }
+
+  restoreDetachedBindings();
   syncDesktopRecoverySurface();
+  syncCapabilitySurface();
   deck.render(manager.snapshots(), manager.selectedIndex);
   try {
     await serveIpc(IPC_SOCKET, (cmd, args) => handleIpc(cmd, args));
@@ -593,27 +833,28 @@ export async function runDaemon(
   }
 
   async function handleIpc(cmd: string, args: Record<string, unknown>): Promise<unknown> {
-    if (serverUpdating && !['status', 'desktop.restart', 'desktop.update', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
-      throw new Error('Codex is updating; wait until your session buttons return.');
+    if ((serverUpdating || privateRecoveryPromise)
+      && !['status', 'diagnostics', 'plugin.heartbeat', 'desktop.restart', 'desktop.update', 'desktop.recover', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
+      throw new Error(privateRecoveryPromise
+        ? 'Codex is recovering in private mode; wait for the READY key.'
+        : 'Codex is updating; wait until your session buttons return.');
     }
     switch (cmd) {
       case 'status':
-        return {
-          selectedIndex: manager.selectedIndex,
-          harness: adapter.name,
-          surface: surfaceMode,
-          slots: manager.snapshots(),
-          workflows: config.workflows,
-          deck: deck.status(),
-          desktop: {
-            ...desktopConnection,
-            sessionsReady: stateHydrated,
-            restoreError,
-            serverVersions: serverVersions?.status ?? null,
-            serverUpdating,
-            serverUpdateError,
-          },
+        return daemonStatus();
+      case 'diagnostics':
+        return diagnostics();
+      case 'plugin.heartbeat': {
+        if (surfaceMode !== 'marketplace') throw new Error('plugin heartbeat is only accepted in Marketplace mode');
+        marketplacePluginHeartbeat = {
+          lastSeenAt: Date.now(),
+          pluginVersion: String(args.pluginVersion ?? 'unknown').slice(0, 40),
+          streamDeckVersion: String(args.streamDeckVersion ?? 'unknown').slice(0, 40),
+          connectedDevices: clampCount(args.connectedDevices, 32),
+          visibleKeys: clampCount(args.visibleKeys, 15),
         };
+        return daemonStatus();
+      }
       case 'send': {
         assertDesktopReady();
         const text = String(args.text ?? '');
@@ -692,6 +933,7 @@ export async function runDaemon(
       }
       case 'sessions': {
         if (!appServer) throw new Error('only supported with the codex-app-server harness');
+        if (desktopConnection.state !== 'connected' || appServer.transportClosed) return [];
         return appServer.listSessions();
       }
       case 'attach': {
@@ -772,6 +1014,9 @@ export async function runDaemon(
       case 'desktop.restart':
         void beginDesktopRestart().catch(() => {});
         return { accepted: true };
+      case 'desktop.recover':
+        void beginPrivateRecovery().catch(() => {});
+        return { accepted: true };
       case 'deck.key': {
         if (!virtualDeck) throw new Error('deck.key is only available in marketplace surface mode');
         const index = Number(args.index);
@@ -798,6 +1043,12 @@ export async function runDaemon(
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
+}
+
+function clampCount(value: unknown, maximum: number): number {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return 0;
+  return Math.max(0, Math.min(maximum, Math.trunc(number)));
 }
 
 const isDirectRun =

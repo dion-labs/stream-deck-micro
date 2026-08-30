@@ -12,13 +12,16 @@ export function renderSlotKey(
   iconSize = 72,
   pulsePhase = 0,
   attentionState?: 'done' | 'error',
+  navigationOnly = false,
 ): Buffer {
   const canvas = createCanvas(iconSize, iconSize);
   const ctx = canvas.getContext('2d');
-  const [r, g, b] = attentionState
+  const [r, g, b] = navigationOnly
+    ? [20, 78, 86]
+    : attentionState
     ? attentionColor(pulsePhase)
     : stateColor(snapshot.state, pulsePhase);
-  const brightAttention = Boolean(attentionState && pulsePhase);
+  const brightAttention = Boolean(!navigationOnly && attentionState && pulsePhase);
   const textColor = brightAttention
     ? `rgb(${ATTENTION_COLORS.ink.join(',')})`
     : '#ffffff';
@@ -30,7 +33,9 @@ export function renderSlotKey(
   ctx.globalAlpha = 0.85;
   ctx.font = `bold ${attentionState ? 9 : 11}px sans-serif`;
   ctx.textAlign = 'center';
-  const caption = attentionState
+  const caption = navigationOnly
+    ? 'NAV ONLY'
+    : attentionState
     ? `${attentionState.toUpperCase()} · OPEN`
     : snapshot.detail === 'session attached'
       ? 'ATTACHED'

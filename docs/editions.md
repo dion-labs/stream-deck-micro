@@ -49,6 +49,8 @@ stream-deck-micro marketplace install
 
 Open the Elgato app and install the bundled profile. The installer preserves
 all session state, workflows, and unrelated configuration.
+It does not install shared Codex mode or restart Desktop. Configure shared
+control separately with `shared install`, then quit Desktop and use `shared open`.
 
 From Marketplace to Independent:
 

@@ -15,6 +15,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     --purple: #7c3aed; --purple-dim: #452394; --blue: #2563eb; --blue-dim: #16337f;
     --grey: #3a3f44; --empty: #202026; --green: #16a34a; --red: #dc2626;
     --attention: #ffd84a; --attention-dim: #5a4708; --attention-ink: #16130a;
+    --navigation: #14505a; --control-off: #493653;
     --radius: 14px;
   }
   * { box-sizing: border-box; }
@@ -83,6 +84,8 @@ export const ADMIN_HTML: string = `<!doctype html>
                  font-weight: 700; }
 
   .cap.st-idle { background: var(--grey); }
+  .cap.st-navigation { background: var(--navigation); }
+  .cap.control-off { background: var(--control-off); }
   .cap.st-done { background: var(--green); animation: glowOk 1s ease; }
   .cap.st-error { background: var(--red); animation: glowErr 1s ease; }
   .cap.pulse-thinking { animation: pulseThinking 900ms ease-in-out infinite; }
@@ -134,6 +137,7 @@ export const ADMIN_HTML: string = `<!doctype html>
               font: 600 11.5px/1.2 inherit; cursor: pointer; }
   .mode-btn.on { color: #11140d; background: var(--accent); }
   .mode-btn[data-mode=live].on { color: #fff; background: #a23737; }
+  .mode-btn:disabled { opacity: .38; cursor: not-allowed; }
   .mode-help { color: var(--faint); font-size: 11.5px; line-height: 1.35; }
   .key-inspector { margin-bottom: 15px; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: #0d0f0c; }
   .key-inspector .eyebrow { color: var(--accent); font: 9px/1.2 ui-monospace, monospace; text-transform: uppercase; letter-spacing: .13em; }
@@ -283,6 +287,16 @@ export const ADMIN_HTML: string = `<!doctype html>
   .desktop-banner strong { display: block; color: #fff5d0; font-size: 12.5px; }
   .desktop-banner.error strong { color: #ffe1e1; }
   .desktop-banner span { display: block; margin-top: 2px; color: inherit; font-size: 11.5px; }
+  .runtime-strip {
+    max-width: 1260px; margin: 8px auto 0; padding: 11px 14px; display: flex; gap: 12px;
+    align-items: center; border: 1px solid #315f65; border-radius: 13px;
+    background: rgba(15,42,46,.88); color: #bcecf0; position: relative; z-index: 2;
+  }
+  .runtime-strip.live { border-color: #3f6634; background: rgba(24,47,20,.88); color: #d4f3c8; }
+  .runtime-strip.offline { border-color: #70404f; background: rgba(54,25,37,.9); color: #f0c1d1; }
+  .runtime-copy { margin-left: auto; white-space: nowrap; }
+  .health-list { color: inherit; font-size: 11px; opacity: .82; }
+  .health-list b { color: #fff; font-weight: 650; }
 
   main {
     max-width: 1320px; margin: 18px auto 0; padding: 0 30px 80px;
@@ -418,6 +432,10 @@ export const ADMIN_HTML: string = `<!doctype html>
   <span class="signal"></span>
   <div><strong id="desktopBannerTitle"></strong><span id="desktopBannerMessage"></span></div>
 </div>
+<div class="runtime-strip" id="runtimeStrip">
+  <div><strong id="runtimeTitle">Checking capabilities…</strong><div class="health-list" id="runtimeHealth"></div></div>
+  <button class="btn runtime-copy" id="copyDiagnostics">Copy diagnostics</button>
+</div>
 
 <main>
   <div class="card deck-card">
@@ -432,6 +450,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     </div>
     <div class="legend">
       <span><span class="sw" style="background:var(--grey)"></span>idle</span>
+      <span><span class="sw" style="background:var(--navigation)"></span>navigation only</span>
       <span><span class="sw" style="background:var(--purple)"></span>thinking</span>
       <span><span class="sw" style="background:var(--blue)"></span>working</span>
       <span><span class="sw" style="background:var(--green)"></span>done</span>
@@ -624,21 +643,34 @@ function renderDeck(status) {
   var recovery = controlMode !== 'configure' && status.deck && status.deck.desktopRecovery;
   if (recovery) {
     for (var recoveryKey = 0; recoveryKey < 15; recoveryKey++) {
+      var canRetryShared = recovery === 'restart-required' || recovery === 'update-required';
+      if (recoveryKey === 6 && canRetryShared) {
+        var updateNeeded = recovery === 'update-required';
+        var retryVisual = keyEl(
+          '<span class="t">' + (updateNeeded ? 'UPDATE' : 'RETRY') + '</span><span class="sub">shared</span>',
+          'act restart',
+          function() { return api('desktop/restart', {}).then(function() { toast('retrying shared Codex control'); }); },
+          updateNeeded ? 'Update and retry shared control. Active turns may be interrupted.' : 'Retry Codex Desktop on the shared server.'
+        );
+        deck.appendChild(retryVisual.root);
+        continue;
+      }
       if (recoveryKey !== 7) {
         deck.appendChild(keyEl('', '', null, 'waiting for Codex Desktop').root);
         continue;
       }
       var restarting = recovery === 'restarting';
       var updating = recovery === 'updating';
-      var updateNeeded = recovery === 'update-required';
-      var busy = restarting || updating;
+      var recoveringPrivate = recovery === 'recovering-private';
+      var privateReady = recovery === 'private-ready';
+      var busy = restarting || updating || recoveringPrivate;
       var recoveryVisual = keyEl(
-        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : updateNeeded ? 'UPDATE' : 'RESTART') + '</span><span class="sub">Codex</span>',
+        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER') + '</span><span class="sub">' + (privateReady ? 'private' : 'Codex') + '</span>',
         'act ' + (busy ? 'restarting' : 'restart'),
-        busy ? null : function() {
-          return api('desktop/restart', {}).then(function() { toast('recovering shared Codex control'); });
+        busy || privateReady ? null : function() {
+          return api('desktop/recover', {}).then(function() { toast('disabling shared mode and recovering Codex'); });
         },
-        updating ? 'Updating the shared backend and restoring your sessions' : restarting ? 'Codex Desktop is reopening' : updateNeeded ? 'Restart the shared backend with the installed Codex version. Active turns may be interrupted.' : 'restart Codex Desktop on the shared server'
+        privateReady ? 'Codex Desktop is usable in private mode; Micro shared control is disabled.' : busy ? 'Codex Desktop recovery is in progress.' : 'Disable Micro shared mode, stop verified leftover listeners, and reopen Codex privately. Active turns may be interrupted.'
       );
       deck.appendChild(recoveryVisual.root);
     }
@@ -676,17 +708,20 @@ function renderActionVisual(action, slots, attention, wfById, status) {
   if (!action) return keyEl('<span class="sub">empty</span>', '', null, 'unassigned key');
   if (action.kind === 'slot') {
     var s = slots[action.index];
-    return mkSlotKey(s, action.index, null, attention[action.index]);
+    return mkSlotKey(s, action.index, null, attention[action.index], status.capabilities && status.capabilities.mode === 'navigation-only');
   }
   if (action.kind === 'workflow') {
     var workflow = wfById[action.id];
     if (!workflow) return keyEl('<span class="sub">missing</span>', 'wf', null, action.id);
     var doIt = workflow.id === 'do-it';
+    var workflowOff = status.capabilities && !status.capabilities.canControlSessions;
     return keyEl('<span class="t">' + esc((doIt ? 'DO IT' : workflow.name).slice(0,10)) + '</span>' +
-      (doIt ? '<span class="sub">lets do it</span>' : ''), doIt ? 'act doit' : 'wf', null, workflow.prompt);
+      '<span class="sub">' + (workflowOff ? 'live off' : doIt ? 'lets do it' : esc(workflow.id)) + '</span>',
+      workflowOff ? 'control-off' : doIt ? 'act doit' : 'wf', null, workflowOff ? status.capabilities.reason : workflow.prompt);
   }
-  if (action.kind === 'stop') return keyEl('<span class="t">STOP</span><span class="sub">interrupt</span>', 'act stop', null, 'interrupt the selected slot');
-  if (action.kind === 'attach') return keyEl('<span class="t">ATCH</span><span class="sub">pull in</span>', 'act attach', null, 'attach the newest Codex session');
+  var controlOff = status.capabilities && !status.capabilities.canControlSessions;
+  if (action.kind === 'stop') return keyEl('<span class="t">STOP</span><span class="sub">' + (controlOff ? 'live off' : 'interrupt') + '</span>', controlOff ? 'control-off' : 'act stop', null, controlOff ? status.capabilities.reason : 'interrupt the selected slot');
+  if (action.kind === 'attach') return keyEl('<span class="t">ATCH</span><span class="sub">' + (controlOff ? 'live off' : 'pull in') + '</span>', controlOff ? 'control-off' : 'act attach', null, controlOff ? status.capabilities.reason : 'attach the newest Codex session');
   var deckInfo = status.deck || { mode:'awake', settings:{ sleepKey:'sleep', autoSleep:{enabled:true} } };
   var toggleMode = deckInfo.settings.sleepKey === 'toggle-auto';
   return keyEl('<span class="t">' + (toggleMode ? 'AUTO' : 'SLEEP') + '</span><span class="sub">' +
@@ -746,6 +781,10 @@ function executeAction(action, status) {
     var slot = status.slots[action.index];
     if (!slot || slot.state === 'empty') { toast('slot ' + (action.index + 1) + ' is empty — attach a session first'); return null; }
     return api('desktop/open', { index: action.index });
+  }
+  if (action.kind !== 'sleep' && status.capabilities && !status.capabilities.canControlSessions) {
+    toast(status.capabilities.reason, true);
+    return null;
   }
   if (action.kind === 'stop') return api('stop', {}).then(function() { toast('interrupt sent'); });
   if (action.kind === 'attach') return api('attach', {}).then(function(r) { toast('attached “' + (r.name || '?') + '” → slot ' + (r.index+1) + ' (' + r.mode + ')'); });
@@ -833,7 +872,7 @@ function renderKeyInspector() {
   if (lastStatus) lastStatus.slots.forEach(function(slot) { options.push({ value:'slot:' + slot.index, label:'Session slot ' + (slot.index + 1) }); });
   options.push({ value:'stop', label:'Stop current turn' }, { value:'attach', label:'Attach newest session' }, { value:'sleep', label:'Sleep control' });
   wfActive.forEach(function(workflow) { options.push({ value:'workflow:' + workflow.id, label:'Workflow · ' + workflow.name }); });
-  host.innerHTML = '<div class="key-inspector"><div class="eyebrow">Selected key · K' + selectedKeyIndex + '</div>' +
+  host.innerHTML = '<div class="key-inspector"><div class="eyebrow">Selected key · K' + (selectedKeyIndex + 1) + '</div>' +
     '<div class="key-title"><strong>' + esc(actionLabel(action)) + '</strong><span class="badge">position ' + (selectedKeyIndex + 1) + '</span></div>' +
     '<label class="hint" for="keyFunction">Function</label><select id="keyFunction">' + options.map(function(option) {
       return '<option value="' + esc(option.value) + '"' + (option.value === actionValue(action) ? ' selected' : '') + '>' + esc(option.label) + '</option>';
@@ -871,19 +910,40 @@ function openWorkflowEditor(id) {
   if (card) { card.scrollIntoView({ behavior:'smooth', block:'center' }); card.querySelector('textarea').focus(); }
 }
 
-function mkSlotKey(s, i, onclick, attentionState) {
+function mkSlotKey(s, i, onclick, attentionState, navigationOnly) {
   var selected = lastStatus && lastStatus.selectedIndex === i;
   var pulse = s.state === 'thinking' ? ' pulse-thinking' : s.state === 'running' ? ' pulse-running' : '';
   var html = s.state === 'empty'
     ? '<span class="corner">' + (i+1) + '</span><span class="sub">empty</span>'
     : '<span class="corner">' + (i+1) + '</span>' + twoLines(s.label) +
-      '<span class="sub">' + (attentionState ? attentionState + ' · open' : s.detail === 'session attached' ? 'attached' : CAPTIONS[s.state]) + '</span>';
-  var visualState = attentionState || s.state;
+      '<span class="sub">' + (navigationOnly ? 'nav only' : attentionState ? attentionState + ' · open' : s.detail === 'session attached' ? 'attached' : CAPTIONS[s.state]) + '</span>';
+  var visualState = navigationOnly && s.state !== 'empty' ? 'navigation' : attentionState || s.state;
   var el = keyEl(html, 'st-' + visualState + pulse, onclick,
     s.state === 'empty' ? 'empty slot' : (s.label + ' — ' + s.state + (s.detail ? ' · ' + s.detail : '')));
   if (selected) el.root.classList.add('selected');
   if (attentionState) el.root.classList.add('attention');
   return el;
+}
+
+function renderRuntimeStatus(status) {
+  var capabilities = status.capabilities || { mode:'offline', label:'Offline', reason:'Runtime capabilities unavailable.' };
+  var strip = $('runtimeStrip');
+  strip.className = 'runtime-strip ' + (capabilities.mode === 'live' ? 'live' : capabilities.mode === 'offline' ? 'offline' : '');
+  $('runtimeTitle').textContent = capabilities.label + ' — ' + capabilities.reason;
+  var components = status.health && status.health.components ? status.health.components : {};
+  var labels = { bridge:'Bridge', surface:'Surface', plugin:'Plugin', codexDesktop:'Codex', sharedControl:'Control', bindings:'Bindings' };
+  $('runtimeHealth').innerHTML = Object.keys(labels).map(function(key) {
+    var component = components[key];
+    return component ? '<b>' + labels[key] + '</b> ' + esc(component.state) : '';
+  }).filter(Boolean).join(' · ');
+  var liveButton = document.querySelector('.mode-btn[data-mode=live]');
+  liveButton.disabled = !capabilities.canControlSessions;
+  liveButton.title = capabilities.canControlSessions ? 'Arm live Control Room actions' : capabilities.reason;
+  if (!capabilities.canControlSessions && controlMode === 'live') {
+    controlMode = 'configure';
+    document.querySelectorAll('.mode-btn').forEach(function(candidate) { candidate.classList.toggle('on', candidate.dataset.mode === 'configure'); });
+    $('modeHelp').textContent = 'Safe editing: keys inspect and drag. Nothing executes.';
+  }
 }
 
 function pushFeed(line) {
@@ -907,12 +967,14 @@ function renderDesktopConnection(status) {
     var versions = desktop.serverVersions || {};
     $('desktopBannerMessage').textContent = desktop.serverUpdateError || (desktop.serverUpdating
       ? 'Reopening Desktop and restoring your saved session buttons. Please wait.'
-      : 'Running ' + versions.runningVersion + '; installed ' + versions.bundledVersion + '. Press the central UPDATE CODEX key in Live mode or on the deck. This restarts the backend and may interrupt active turns; nothing is downloaded.');
+      : 'Running ' + versions.runningVersion + '; installed ' + versions.bundledVersion + '. Shared control requires compatibility verification. At a safe stopping point, quit Codex, run shared install, then shared open. Restarting may interrupt active turns. Unverified builds are never activated by the deck.');
     return;
   }
-  banner.classList.toggle('error', desktop.state === 'restart-required' || Boolean(desktop.restoreError));
+  banner.classList.toggle('error', desktop.state === 'restart-required' || desktop.state === 'unavailable' || Boolean(desktop.restoreError));
   var title = desktop.restoreError
     ? 'Session restore needs attention'
+    : desktop.state === 'unavailable'
+      ? 'Shared control disabled'
     : desktop.state === 'restart-required'
       ? 'Restart ChatGPT Desktop'
       : desktop.state === 'waiting'
@@ -1199,6 +1261,10 @@ document.querySelectorAll('.tab-btn').forEach(function(btn) {
 
 document.querySelectorAll('.mode-btn').forEach(function(btn) {
   btn.addEventListener('click', function() {
+    if (btn.dataset.mode === 'live' && lastStatus && lastStatus.capabilities && !lastStatus.capabilities.canControlSessions) {
+      toast(lastStatus.capabilities.reason, true);
+      return;
+    }
     controlMode = btn.dataset.mode;
     document.querySelectorAll('.mode-btn').forEach(function(candidate) { candidate.classList.toggle('on', candidate === btn); });
     $('modeHelp').textContent = controlMode === 'configure'
@@ -1219,10 +1285,11 @@ function refresh() {
     var assigned = activeSlotIndexes(status);
     var attached = status.slots.filter(function(s) { return assigned.indexOf(s.index) !== -1 && s.state !== 'empty'; }).length;
     $('livedot').classList.toggle('on', true);
-    $('meta').textContent = status.harness + ' · ' +
+    $('meta').textContent = (status.capabilities ? status.capabilities.label : status.harness) + ' · ' +
       attached + '/' + assigned.length + ' session keys' +
       (active ? ' · ' + active + ' active' : '');
     renderDesktopConnection(status);
+    renderRuntimeStatus(status);
     status.slots.forEach(function(s) {
       var prev = prevStates[s.index];
       if (prev !== undefined && prev !== s.state) {
@@ -1237,6 +1304,13 @@ function refresh() {
     $('meta').textContent = 'daemon unreachable: ' + e.message;
   });
 }
+
+$('copyDiagnostics').addEventListener('click', function() {
+  api('diagnostics').then(function(report) {
+    var text = JSON.stringify(report, null, 2);
+    return navigator.clipboard.writeText(text).then(function() { toast('redacted diagnostics copied'); });
+  }).catch(function(error) { toast(error.message, true); });
+});
 
 function loadWorkflows() {
   return api('workflows.get').then(function(data) {

@@ -12,6 +12,7 @@ export type { MonitoredThread } from './monitor.js';
 
 /** The connection surface the adapter needs — faked in unit tests. */
 export interface AppServerConn {
+  readonly isClosed?: boolean;
   request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown>;
   onNotification(cb: (method: string, params: unknown) => void): () => void;
   notify?(method: string, params?: unknown): void;
@@ -23,6 +24,7 @@ export function spawnAppServerConn(endpoint?: string): AppServerConn {
     ? RpcConnection.webSocket(endpoint)
     : RpcConnection.spawn('codex', ['app-server']);
   return {
+    get isClosed() { return conn.isClosed; },
     request: (m, p, t) => conn.request(m, p, t),
     onNotification: (cb) => {
       conn.on('notification', cb);
@@ -314,6 +316,9 @@ export class AppServerAdapter implements HarnessAdapter {
   private readonly monitor: ExternalThreadMonitor;
   private initialized = false;
 
+  /** Transport failure is independent of the Desktop/backend process generation. */
+  get transportClosed(): boolean { return this.conn.isClosed === true; }
+
   constructor(
     private readonly options: AppServerAdapterOptions = {},
     conn?: AppServerConn,
@@ -356,6 +361,7 @@ export class AppServerAdapter implements HarnessAdapter {
     if (this.initialized) return;
     await this.conn.request('initialize', {
       clientInfo: { name: 'stream-deck-micro', title: 'Stream Deck Micro', version: '0.2.0' },
+      capabilities: { experimentalApi: true },
     });
     this.conn.notify?.('initialized');
     this.initialized = true;
@@ -404,6 +410,9 @@ export class AppServerAdapter implements HarnessAdapter {
       const resp = (await this.conn.request('thread/resume', {
         threadId: id,
         cwd: opts.cwd,
+        // Keep the same live session and notifications without transferring its
+        // history. Long conversations can exceed the bounded WS frame size.
+        excludeTurns: true,
       })) as { thread?: { id?: string; name?: string | null } };
       const threadId = resp.thread?.id ?? id;
       return this.register(new AppServerSession(this.conn, threadId, resp.thread?.name ?? null));

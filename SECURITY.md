@@ -7,8 +7,12 @@ localhost-control bypasses, or vulnerabilities that can cause commands to run.
 ## Security model
 
 - The daemon, Unix socket, and Control Room are local-machine tools.
-- The shared Codex App Server binds to loopback only. Its installer rejects
-  remote, authenticated, and implicit-port endpoints.
+- The shared Codex App Server binds to `127.0.0.1` and requires a fresh
+  per-launch bearer token stored in a mode-0600 local runtime file. Its installer
+  rejects remote hosts, URL credentials, paths, and implicit-port endpoints.
+- Shared mode uses a process-scoped Desktop launch, never a global launchd
+  redirect. Changed Desktop/server artifacts fall back to native private mode
+  until explicitly reverified. See [failure boundaries](docs/shared-server-hardening.md).
 - The Control Room binds to `127.0.0.1`, rejects unexpected hosts and origins,
   and authenticates API requests with a per-process token.
 - Prompts can start agent turns that modify files or execute commands according

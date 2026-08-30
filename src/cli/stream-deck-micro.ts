@@ -6,8 +6,11 @@ const HELP = `stream-deck-micro — a local Codex command center for Stream Deck
 usage:
   stream-deck-micro doctor [config] [--json] [--marketplace]
                                                verify the machine and configuration
-  stream-deck-micro shared install [config]   install the shared Codex App Server
+  stream-deck-micro shared install [config]   verify and prepare scoped shared control (does not restart Codex)
+  stream-deck-micro shared open               open Codex with verified shared control (quit it first)
+  stream-deck-micro shared verify             run an isolated compatibility probe; no live configuration changes
   stream-deck-micro shared status             inspect shared-server health and Desktop routing
+  stream-deck-micro shared recover [config]   disable shared mode and reopen Codex privately
   stream-deck-micro shared uninstall [config] remove shared mode and restore private sessions
   stream-deck-micro marketplace install [config]
                                                install the background Marketplace bridge
@@ -41,14 +44,28 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'shared') {
-    const { installSharedServer, sharedServerStatus, uninstallSharedServer } = await import(
+    const { installSharedServer, sharedServerStatus, uninstallSharedServer, openSharedCodexDesktop, recoverPrivateCodex, DESKTOP_CODEX } = await import(
       '../sharedServer.js'
     );
     const [action = 'status', ...sharedArgs] = args;
+    if (action === 'verify') {
+      const { verifyDesktopServer } = await import('../desktopCompatibility.js');
+      process.stdout.write(`${JSON.stringify(await verifyDesktopServer(DESKTOP_CODEX), null, 2)}\n`);
+      return;
+    }
+    if (action === 'open') {
+      await openSharedCodexDesktop();
+      return;
+    }
     const urlIndex = sharedArgs.indexOf('--url');
     if (urlIndex >= 0 && !sharedArgs[urlIndex + 1]) throw new Error('--url requires a value');
     const url = urlIndex >= 0 ? sharedArgs[urlIndex + 1] : undefined;
-    const configPath = sharedArgs.find((arg, index) => arg !== '--url' && index !== urlIndex + 1);
+    const configPath = sharedArgs.find((arg, index) => arg !== '--url' && (urlIndex < 0 || index !== urlIndex + 1));
+    if (action === 'recover') {
+      await recoverPrivateCodex(configPath, url);
+      process.stdout.write('\nCodex reopened in private mode. Micro shared control is disabled; saved deck bindings were preserved.\n');
+      return;
+    }
     const status = action === 'install'
       ? await installSharedServer(configPath, url)
       : action === 'uninstall'
@@ -59,7 +76,7 @@ async function main(): Promise<void> {
     if (!status) throw new Error(`unknown shared action: ${action}`);
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
     if (action === 'install') {
-      process.stdout.write('\nShared mode installed. Fully quit and reopen Codex Desktop once.\n');
+      process.stdout.write('\nShared control prepared; no app was restarted. Quit Codex Desktop, then run: stream-deck-micro shared open\nNormal Dock/Spotlight launches remain private.\n');
     } else if (action === 'uninstall') {
       process.stdout.write('\nShared mode removed. Fully quit and reopen Codex Desktop once.\n');
     }
@@ -81,8 +98,8 @@ async function main(): Promise<void> {
           : null;
     if (!status) throw new Error(`unknown marketplace action: ${action}`);
     process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
-    if (action === 'install' && status.desktopRestartRequired) {
-      process.stdout.write('\nFully quit and reopen Codex Desktop once to join the shared server.\n');
+    if (action === 'install') {
+      process.stdout.write('\nMarketplace bridge installed; Codex routing was not changed. Shared control is set up separately with shared install and shared open.\n');
     }
     return;
   }

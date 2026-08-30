@@ -1,6 +1,8 @@
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
+import WebSocket from 'ws';
+import { sharedConnectionHeaders } from '../../sharedRuntime.js';
 
 /**
  * Minimal JSON-RPC 2.0 client over a child process's stdio, speaking the codex
@@ -46,7 +48,10 @@ export class RpcConnection {
   /** Connect to an App Server WebSocket. Requests made while connecting are queued. */
   static webSocket(
     url: string,
-    factory: WebSocketFactory = (endpoint) => new WebSocket(endpoint),
+    factory: WebSocketFactory = (endpoint) => new WebSocket(endpoint, {
+      headers: sharedConnectionHeaders(endpoint),
+      maxPayload: 32 * 1024 * 1024,
+    }),
   ): RpcConnection {
     const connection = new RpcConnection();
     connection.bindWebSocket(factory(url));
@@ -99,8 +104,13 @@ export class RpcConnection {
       }
       this.dispatch(msg);
     });
-    socket.addEventListener('error', () => {
-      this.fail(new Error('app-server WebSocket failed'));
+    socket.addEventListener('error', (event) => {
+      const cause = event.error instanceof Error ? event.error : undefined;
+      const code = (cause as { code?: unknown } | undefined)?.code;
+      // Surface bounded library error codes, not arbitrary messages that might
+      // contain connection details. Retain the original cause for diagnostics.
+      const detail = typeof code === 'string' && /^WS_ERR_[A-Z_]+$/.test(code) ? ` (${code})` : '';
+      this.fail(new Error(`app-server WebSocket failed${detail}`, { cause }));
     });
     socket.addEventListener('close', () => {
       this.fail(new Error('app-server WebSocket closed'));
@@ -189,9 +199,9 @@ export class RpcConnection {
   }
 
   close(): void {
-    if (this.closed) return;
-    this.fail(new Error('connection closed'));
+    if (!this.closed) this.fail(new Error('connection closed'));
     this.closeTransport?.();
+    this.closeTransport = null;
     this.emitter.removeAllListeners();
   }
 }

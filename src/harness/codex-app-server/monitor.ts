@@ -47,17 +47,18 @@ export class ExternalThreadMonitor {
   ) {}
 
   watch(threadId: string, emit: (e: SessionEvent) => void): () => void {
-    this.watched.set(threadId, {
+    const entry: Watched = {
       thread: { id: threadId },
       lastUpdatedAt: null,
       lastBumpWallMs: 0,
       active: false,
       lastClass: null,
       emit,
-    });
+    };
+    this.watched.set(threadId, entry);
     this.ensureTimer();
     return () => {
-      this.watched.delete(threadId);
+      if (this.watched.get(threadId) === entry) this.watched.delete(threadId);
     };
   }
 

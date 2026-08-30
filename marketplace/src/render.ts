@@ -11,6 +11,8 @@ const STATE_COLORS = {
 
 const ATTENTION_COLORS = ['#5A4708', '#FFD84A'] as const;
 const ATTENTION_INK = '#16130A';
+const NAVIGATION_COLORS = ['#123F46', '#185B64'] as const;
+const DISABLED_COLORS = ['#30263A', '#493653'] as const;
 
 export function renderKey(
   status: DaemonStatus | null,
@@ -29,17 +31,35 @@ export function renderKey(
       : blank('#0B0708');
   }
   if (status.deck.desktopRecovery) {
-    if (keyIndex !== 7) return blank('#000000');
     const restarting = status.deck.desktopRecovery === 'restarting';
     const updating = status.deck.desktopRecovery === 'updating';
-    const busy = restarting || updating;
+    const recoveringPrivate = status.deck.desktopRecovery === 'recovering-private';
+    const privateReady = status.deck.desktopRecovery === 'private-ready';
+    const canRetryShared = status.deck.desktopRecovery === 'restart-required'
+      || status.deck.desktopRecovery === 'update-required';
+    if (keyIndex === 6 && canRetryShared) {
+      return tile('#6A3B0A', '#B46C14', status.deck.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY', 'SHARED', false, true);
+    }
+    if (keyIndex !== 7) return blank('#000000');
+    const busy = restarting || updating || recoveringPrivate;
     return tile(
-      busy ? '#293142' : '#6A3B0A',
-      busy ? '#4A5A73' : '#B46C14',
-      updating ? 'UPDATING' : restarting ? 'OPENING' : status.deck.desktopRecovery === 'update-required' ? 'UPDATE' : 'RESTART',
-      'CODEX',
+      privateReady ? '#17482F' : busy ? '#293142' : '#0E526A',
+      privateReady ? '#256C48' : busy ? '#4A5A73' : '#12627F',
+      updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER',
+      privateReady ? 'PRIVATE' : 'CODEX',
       false,
       !busy,
+    );
+  }
+  const feedback = status.deck.actionFeedback;
+  if (feedback && feedback.keyIndex === keyIndex && feedback.expiresAt > Date.now()) {
+    return tile(
+      '#542039',
+      '#792F55',
+      feedback.outcome === 'blocked' ? 'BLOCKED' : 'FAILED',
+      feedback.message,
+      false,
+      true,
     );
   }
   if (status.deck.mode === 'asleep') return blank('#000000');
@@ -71,11 +91,14 @@ function renderAction(
     const slot = status.slots[action.index];
     if (!slot) return blank('#090A0D');
     const attention = status.deck.attention.find((entry) => entry.index === action.index);
-    const colors = attention ? ATTENTION_COLORS : STATE_COLORS[slot.state];
-    const lively = slot.state === 'thinking' || slot.state === 'running' || Boolean(attention);
+    const navigationOnly = capabilityMode(status) === 'navigation-only' && slot.state !== 'empty';
+    const colors = navigationOnly ? NAVIGATION_COLORS : attention ? ATTENTION_COLORS : STATE_COLORS[slot.state];
+    const lively = !navigationOnly && (slot.state === 'thinking' || slot.state === 'running' || Boolean(attention));
     const end = lively && !pulse ? colors[0] : colors[1];
     const title = slot.state === 'empty' ? `AG${action.index + 1}` : compact(slot.label, 12);
-    const footer = attention
+    const footer = navigationOnly
+      ? 'NAV ONLY'
+      : attention
       ? `${attention.state} · open`
       : slot.detail === 'session attached'
         ? 'ATTACHED'
@@ -92,8 +115,13 @@ function renderAction(
     );
   }
 
-  if (action.kind === 'stop') return tile('#67151C', '#DC2626', 'STOP', 'TURN');
-  if (action.kind === 'attach') return tile('#6A3B0A', '#B46C14', 'ATCH', 'LATEST');
+  const controlUnavailable = capabilityMode(status) !== 'live';
+  if (action.kind === 'stop') return controlUnavailable
+    ? tile(DISABLED_COLORS[0], DISABLED_COLORS[1], 'STOP', 'LIVE OFF')
+    : tile('#67151C', '#DC2626', 'STOP', 'TURN');
+  if (action.kind === 'attach') return controlUnavailable
+    ? tile(DISABLED_COLORS[0], DISABLED_COLORS[1], 'ATCH', 'LIVE OFF')
+    : tile('#6A3B0A', '#B46C14', 'ATCH', 'LATEST');
   if (action.kind === 'sleep') {
     if (status.deck.settings.sleepKey === 'toggle-auto') {
       return tile(
@@ -109,11 +137,17 @@ function renderAction(
   const workflow = status.workflows.find((entry) => entry.id === action.id);
   const doIt = action.id === 'do-it';
   return tile(
-    doIt ? '#0B552E' : '#292F66',
-    doIt ? '#167847' : '#414B91',
+    controlUnavailable ? DISABLED_COLORS[0] : doIt ? '#0B552E' : '#292F66',
+    controlUnavailable ? DISABLED_COLORS[1] : doIt ? '#167847' : '#414B91',
     compact(doIt ? 'DO IT' : (workflow?.name ?? action.id), 10),
-    doIt ? 'PROMPT' : compact(action.id, 11),
+    controlUnavailable ? 'LIVE OFF' : doIt ? 'PROMPT' : compact(action.id, 11),
   );
+}
+
+function capabilityMode(status: DaemonStatus): 'live' | 'navigation-only' | 'offline' {
+  // Missing means a pre-0.1.0.5 bridge. Preserve its previous live rendering
+  // until the bridge is upgraded and can report truthful capabilities.
+  return status.capabilities?.mode ?? status.deck.capabilityMode ?? 'live';
 }
 
 function tile(

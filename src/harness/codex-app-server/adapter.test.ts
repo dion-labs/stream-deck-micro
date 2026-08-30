@@ -1,6 +1,8 @@
 import { afterAll, describe, expect, it, vi } from 'vitest';
-import { AppServerAdapter, WriterHeldError, type AppServerConn } from './adapter.js';
+import { AppServerAdapter, WriterHeldError, spawnAppServerConn, type AppServerConn } from './adapter.js';
 import { classifyRolloutTail } from './monitor.js';
+import { RpcConnection } from './rpc.js';
+import { SlotManager } from '../../core/slotManager.js';
 import type { SessionEvent } from '../../core/types.js';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,6 +13,8 @@ class FakeConn implements AppServerConn {
   notificationSink: ((method: string, params: unknown) => void)[] = [];
   requests: { method: string; params: unknown }[] = [];
   closed = false;
+
+  get isClosed(): boolean { return this.closed; }
 
   constructor() {
     this.responders.set('initialize', () => ({}));
@@ -55,20 +59,99 @@ async function eventsOf(session: { onEvent: (cb: (e: SessionEvent) => void) => (
 }
 
 describe('AppServerAdapter', () => {
+  it('reads transportClosed dynamically from the current connection', () => {
+    const connection = new FakeConn();
+    const adapter = adapterWith(connection);
+    try {
+      expect(adapter.transportClosed).toBe(false);
+      connection.close();
+      expect(adapter.transportClosed).toBe(true);
+
+      const replacement = new FakeConn();
+      adapter.reconnect(replacement);
+      expect(adapter.transportClosed).toBe(false);
+      replacement.close();
+      expect(adapter.transportClosed).toBe(true);
+    } finally {
+      adapter.dispose();
+    }
+  });
+
+  it.each(['error', 'close'] as const)('exposes a live transportClosed getter through the WS wrapper on %s', (event) => {
+    const listeners = new Map<string, (event: unknown) => void>();
+    const socket = {
+      readyState: 1,
+      send: vi.fn(),
+      close: () => listeners.get('close')?.({}),
+      addEventListener: (type: string, listener: (event: unknown) => void) => {
+        listeners.set(type, listener);
+      },
+    };
+    // The explicit factory and spy prevent network connections and runtime-state reads.
+    const endpoint = 'ws://127.0.0.1:1';
+    const rpc = RpcConnection.webSocket(endpoint, () => socket);
+    const factory = vi.spyOn(RpcConnection, 'webSocket').mockReturnValue(rpc);
+    const connection = spawnAppServerConn(endpoint);
+    const adapter = new AppServerAdapter({}, connection);
+    try {
+      expect(connection.isClosed).toBe(false);
+      expect(adapter.transportClosed).toBe(false);
+      listeners.get(event)?.({});
+      expect(connection.isClosed).toBe(true);
+      expect(adapter.transportClosed).toBe(true);
+      expect(socket.send).not.toHaveBeenCalled();
+    } finally {
+      adapter.dispose();
+      factory.mockRestore();
+    }
+  });
+
   it('reconnects to the updated backend and restores session notification routing', async () => {
     const oldConnection = new FakeConn();
     const adapter = adapterWith(oldConnection);
     await adapter.createSession({ cwd: '/tmp/x' });
     const nextConnection = new FakeConn();
     nextConnection.respond('thread/resume', () => ({ thread: { id: 't-new' } }));
+    oldConnection.close();
+    expect(adapter.transportClosed).toBe(true);
     adapter.reconnect(nextConnection);
     expect(oldConnection.closed).toBe(true);
+    expect(adapter.transportClosed).toBe(false);
     const restored = await adapter.resumeSession('t-new', { cwd: '/tmp/x' });
     const events = await eventsOf(restored);
     nextConnection.push('turn/started', { threadId: 't-new' });
     expect(events).toEqual([{ type: 'turn-started' }]);
     expect(nextConnection.requests.map((request) => request.method)).toEqual(['initialize', 'thread/resume']);
     adapter.dispose();
+  });
+
+  it('keeps a replacement monitor session subscribed when reconnect restoration disposes the old slot', async () => {
+    const adapter = adapterWith(new FakeConn());
+    const manager = new SlotManager(adapter, { slotCount: 1, defaultCwd: '/tmp/x' });
+    try {
+      const oldSession = adapter.monitorSession({ id: 'ext-1', name: 'Before' });
+      const oldEvents = await eventsOf(oldSession);
+      manager.attachSession(0, oldSession);
+
+      const replacementConnection = new FakeConn();
+      replacementConnection.respond('thread/list', () => ({
+        data: [{ id: 'ext-1', name: 'After reconnect', path: null }],
+      }));
+      adapter.reconnect(replacementConnection);
+      const replacementSession = adapter.monitorSession({ id: 'ext-1', name: 'Before' });
+      const replacementEvents = await eventsOf(replacementSession);
+      // bind() disposes the old session after the replacement watcher is registered.
+      manager.attachSession(0, replacementSession);
+      await adapter.listThreadRecords();
+
+      expect(oldEvents).toEqual([]);
+      expect(replacementEvents).toEqual([{ type: 'meta', name: 'After reconnect' }]);
+      expect(manager.snapshot(0)).toMatchObject({ sessionId: 'ext-1', label: 'After reconnect' });
+      expect(replacementConnection.requests.map(({ method }) => method)).toEqual(['initialize', 'thread/list']);
+    } finally {
+      manager.clear(0);
+      adapter.dispose();
+    }
   });
   it('initializes once and starts threads via thread/start', async () => {
     const conn = new FakeConn();
@@ -163,6 +246,27 @@ describe('AppServerAdapter', () => {
     await expect(adapter.resumeSession('abc', { cwd: '/x' })).rejects.toThrow(WriterHeldError);
   });
 
+  it('restores the same live session without fetching conversation history', async () => {
+    const conn = new FakeConn();
+    conn.respond('thread/resume', (params) => {
+      expect(params).toEqual({ threadId: 'long-session', cwd: '/x', excludeTurns: true });
+      return { thread: { id: 'long-session', name: 'Long session', turns: [] } };
+    });
+    const adapter = adapterWith(conn);
+    try {
+      const session = await adapter.resumeSession('long-session', { cwd: '/x' });
+      expect(conn.requests[0]).toMatchObject({
+        method: 'initialize', params: { capabilities: { experimentalApi: true } },
+      });
+      expect(session.sessionId).toBe('long-session');
+      expect(session.name).toBe('Long session');
+      const events = await eventsOf(session);
+      conn.push('turn/started', { threadId: 'long-session', turn: { id: 'live-turn' } });
+      expect(events).toEqual([{ type: 'turn-started' }]);
+      expect(conn.requests.map(({ method }) => method)).toEqual(['initialize', 'thread/resume']);
+    } finally { adapter.dispose(); }
+  });
+
   it('thread/name/updated updates the session name via a meta event', async () => {
     const conn = new FakeConn();
     const adapter = adapterWith(conn);
@@ -222,6 +326,7 @@ describe('AppServerAdapter', () => {
     expect(conn.requests.find((request) => request.method === 'thread/resume')?.params).toEqual({
       threadId: 'ext-1',
       cwd: '/tmp/rust',
+      excludeTurns: true,
     });
     expect(events).toContainEqual({ type: 'turn-started' });
     expect(events).toContainEqual({ type: 'turn-completed' });

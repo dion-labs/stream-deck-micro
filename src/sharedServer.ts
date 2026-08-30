@@ -1,4 +1,5 @@
 import { execFile, execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import {
   accessSync,
   chmodSync,
@@ -10,10 +11,18 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
-import { APP_DIR, saveAppServerUrl } from './config.js';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { APP_DIR, loadConfig, saveAppServerUrl } from './config.js';
+import { verifyDesktopServer } from './desktopCompatibility.js';
+import {
+  DESKTOP_CODEX, DESKTOP_LAUNCHER, DEFAULT_SHARED_SERVER_URL,
+  SHARED_INSTALL_STATE, SHARED_RUNTIME_STATE, cleanDesktopEnvironment,
+  desktopBuildFingerprint, readSharedInstall, readSharedRuntime, validateSharedEndpoint,
+  type DesktopSharedInstall,
+} from './sharedRuntime.js';
+export { DESKTOP_CODEX, DEFAULT_SHARED_SERVER_URL } from './sharedRuntime.js';
 
-export const DEFAULT_SHARED_SERVER_URL = 'ws://127.0.0.1:17532';
 export const SHARED_SERVER_LABEL = 'ai.dionlabs.stream-deck-micro.codex-app-server';
 export const DESKTOP_ENV_LABEL = 'ai.dionlabs.stream-deck-micro.desktop-environment';
 export const DESKTOP_ENDPOINT_ENV = 'CODEX_APP_SERVER_WS_URL';
@@ -21,8 +30,7 @@ export const DESKTOP_ENDPOINT_ENV = 'CODEX_APP_SERVER_WS_URL';
 const LAUNCH_AGENTS_DIR = join(homedir(), 'Library', 'LaunchAgents');
 const SERVER_PLIST = join(LAUNCH_AGENTS_DIR, `${SHARED_SERVER_LABEL}.plist`);
 const ENV_PLIST = join(LAUNCH_AGENTS_DIR, `${DESKTOP_ENV_LABEL}.plist`);
-const INSTALL_STATE = join(APP_DIR, 'shared-server.json');
-export const DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
+const INSTALL_STATE = SHARED_INSTALL_STATE;
 const DESKTOP_APP = '/Applications/ChatGPT.app/Contents/MacOS/ChatGPT';
 
 export type DesktopConnectionState =
@@ -30,12 +38,14 @@ export type DesktopConnectionState =
   | 'waiting'
   | 'connecting'
   | 'restart-required'
+  | 'unavailable'
   | 'connected';
 
 export interface DesktopConnectionStatus {
   state: DesktopConnectionState;
   endpoint: string | null;
   message: string;
+  generation?: string;
 }
 
 interface SharedInstallState {
@@ -49,6 +59,12 @@ export interface CodexDesktopLifecycle {
   isRunning(): boolean;
   open(): Promise<void>;
   wait(ms: number): Promise<void>;
+}
+
+export interface PrivateCodexRecoveryLifecycle extends CodexDesktopLifecycle {
+  uninstall(configPath?: string): Promise<void>;
+  readProcesses(): string;
+  signal(pid: number, signal: NodeJS.Signals): void;
 }
 
 export interface SharedServerStatus {
@@ -66,54 +82,40 @@ export async function installSharedServer(
   configPath?: string,
   requestedUrl = DEFAULT_SHARED_SERVER_URL,
 ): Promise<SharedServerStatus> {
-  const url = validateLoopbackEndpoint(requestedUrl);
-  const codexPath = findCodexBinary();
-  const previous = readInstallState();
-  const canReuse = previous?.url === url
-    && previous.codexPath === codexPath
-    && existsSync(SERVER_PLIST)
-    && existsSync(ENV_PLIST)
-    && await isHealthy(url);
-  mkdirSync(APP_DIR, { recursive: true, mode: 0o700 });
-  mkdirSync(LAUNCH_AGENTS_DIR, { recursive: true, mode: 0o700 });
-
-  const stdoutPath = join(APP_DIR, 'codex-app-server.log');
-  const stderrPath = join(APP_DIR, 'codex-app-server.error.log');
-  writePrivateFile(
-    SERVER_PLIST,
-    launchAgentPlist({
-      label: SHARED_SERVER_LABEL,
-      args: [codexPath, 'app-server', '--listen', url],
-      keepAlive: true,
-      stdoutPath,
-      stderrPath,
-    }),
-  );
-  writePrivateFile(
-    ENV_PLIST,
-    launchAgentPlist({
-      label: DESKTOP_ENV_LABEL,
-      args: ['/bin/launchctl', 'setenv', DESKTOP_ENDPOINT_ENV, url],
-      keepAlive: false,
-      stdoutPath,
-      stderrPath,
-    }),
-  );
-
-  const domain = launchDomain();
-  if (!canReuse) {
-    bootout(domain, ENV_PLIST);
-    bootout(domain, SERVER_PLIST);
-    launchctl(['bootstrap', domain, SERVER_PLIST]);
-    launchctl(['bootstrap', domain, ENV_PLIST]);
+  const url = validateSharedEndpoint(requestedUrl);
+  // Validate BEFORE any config, launchd or application mutation.
+  loadConfig(configPath);
+  if (readSharedRuntime()?.mode === 'shared' || existsSync(SERVER_PLIST)) {
+    throw new Error('Quit shared Codex Desktop and run shared uninstall before migrating/reinstalling; active tasks are never stopped by install');
   }
-  launchctl(['setenv', DESKTOP_ENDPOINT_ENV, url]);
-
+  if (launchctlOutput(['getenv', DESKTOP_ENDPOINT_ENV])) {
+    throw new Error('Legacy global Desktop routing is still set. Run shared uninstall before installing scoped shared control');
+  }
+  const fingerprint = await desktopBuildFingerprint();
+  const verification = await verifyDesktopServer(DESKTOP_CODEX);
+  if (fingerprint !== await desktopBuildFingerprint()) throw new Error('Desktop changed during verification; retry after its update finishes');
+  const bridgePath = join(dirname(fileURLToPath(import.meta.url)), 'cli', 'codex-desktop-bridge.js');
+  accessSync(bridgePath, constants.R_OK);
+  mkdirSync(APP_DIR, { recursive: true, mode: 0o700 });
+  // The launcher remains as a native passthrough after uninstall so an already
+  // running Desktop never loses the executable it was launched with.
+  const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  writePrivateFile(DESKTOP_LAUNCHER, `#!/bin/sh
+if [ -f ${quote(INSTALL_STATE)} ] && [ -x ${quote(process.execPath)} ] && [ -f ${quote(bridgePath)} ]; then
+  exec ${quote(process.execPath)} ${quote(bridgePath)} "$@"
+fi
+unset CODEX_CLI_PATH CODEX_APP_SERVER_WS_URL CODEX_APP_SERVER_FORCE_CLI CODEX_APP_SERVER_USE_LOCAL_DAEMON
+exec ${quote(DESKTOP_CODEX)} "$@"
+`);
+  chmodSync(DESKTOP_LAUNCHER, 0o700);
   const savedConfigPath = resolve(saveAppServerUrl(configPath, url));
-  const state: SharedInstallState = { url, codexPath, configPath: savedConfigPath };
+  const state: DesktopSharedInstall = {
+    mode: 'desktop-launch', url, codexPath: DESKTOP_CODEX, configPath: savedConfigPath,
+    launcherPath: DESKTOP_LAUNCHER, fingerprint, version: verification.version,
+    token: randomBytes(32).toString('hex'),
+  };
   writePrivateFile(INSTALL_STATE, `${JSON.stringify(state, null, 2)}\n`);
-
-  await waitForHealth(url);
+  if (existsSync(SHARED_RUNTIME_STATE)) unlinkSync(SHARED_RUNTIME_STATE);
   return sharedServerStatus();
 }
 
@@ -127,7 +129,7 @@ export async function uninstallSharedServer(configPath?: string): Promise<Shared
   } catch {
     // Already unset.
   }
-  for (const path of [ENV_PLIST, SERVER_PLIST, INSTALL_STATE]) {
+  for (const path of [ENV_PLIST, SERVER_PLIST, INSTALL_STATE, SHARED_RUNTIME_STATE]) {
     if (existsSync(path)) unlinkSync(path);
   }
   saveAppServerUrl(configPath ?? state?.configPath, null);
@@ -141,7 +143,7 @@ export async function sharedServerStatus(
   const url = state?.url ?? fallbackUrl;
   const desktopConnection = desktopConnectionStatus(url);
   return {
-    installed: existsSync(SERVER_PLIST) && existsSync(ENV_PLIST),
+    installed: readSharedInstall() !== null && existsSync(DESKTOP_LAUNCHER),
     healthy: await isHealthy(url),
     desktopRestartRequired: desktopConnection.state === 'restart-required',
     url,
@@ -163,6 +165,24 @@ export function desktopConnectionStatus(endpoint: string): DesktopConnectionStat
     });
   } catch {
     return desktopStatus('waiting', endpoint);
+  }
+
+  const install = readSharedInstall();
+  if (install?.url === endpoint) {
+    const runtime = readSharedRuntime();
+    const records = parseProcessList(processes);
+    if (runtime?.url === endpoint && runtime.mode === 'shared' && runtime.serverPid
+      && records.get(runtime.serverPid)?.ppid === runtime.bridgePid
+      && records.get(runtime.serverPid)?.command.startsWith(`${DESKTOP_CODEX} `)
+      && records.get(runtime.serverPid)?.command.includes(`--listen ${endpoint}`)
+      && hasDesktopAncestor(runtime.bridgePid, records)) {
+      return { ...desktopStatus('connected', endpoint), generation: `${runtime.bridgePid}:${runtime.serverPid}` };
+    }
+    if (runtime && runtime.mode !== 'shared') {
+      return { state: 'unavailable', endpoint, message: `Shared control is disabled. ${runtime.reason ?? 'Run shared install to verify compatibility.'}` };
+    }
+  } else {
+    return { state: 'unavailable', endpoint, message: 'Shared control is not installed. Run shared install, then shared open; Codex remains in private mode.' };
   }
 
   const desktopPids = desktopProcessIds(processes);
@@ -224,10 +244,12 @@ export function processListHasDesktopPrivateAppServer(processes: string): boolea
     if (
       !record.command.startsWith(`${DESKTOP_CODEX} `)
       || !/(?:^|\s)app-server(?:\s|$)/.test(record.command)
+      || /--listen\s+ws:\/\//.test(record.command)
     ) continue;
     let parent = records.get(record.ppid);
     const visited = new Set<number>();
     while (parent && !visited.has(parent.ppid)) {
+      if (/--listen\s+ws:\/\//.test(parent.command)) break;
       if (parent.command === DESKTOP_APP) return true;
       visited.add(parent.ppid);
       parent = records.get(parent.ppid);
@@ -238,7 +260,8 @@ export function processListHasDesktopPrivateAppServer(processes: string): boolea
 
 /**
  * Gracefully restart Codex Desktop after the user explicitly requests recovery.
- * The shared endpoint is already installed in launchd before this can be called.
+ * Default lifecycle always opens a clean, private Desktop. Shared activation is
+ * a separate operation with verification BEFORE requesting a quit.
  */
 export async function restartCodexDesktop(
   lifecycle: CodexDesktopLifecycle = macCodexDesktopLifecycle,
@@ -263,28 +286,124 @@ export async function restartCodexDesktop(
 
 /** Never restart an arbitrary endpoint or a user-supplied Codex executable. */
 export function isManagedDesktopServer(endpoint: string): boolean {
-  const state = readInstallState();
-  if (state?.url !== endpoint || state.codexPath !== DESKTOP_CODEX) return false;
+  return readSharedInstall()?.url === endpoint && existsSync(DESKTOP_LAUNCHER);
+}
+
+export async function assertSharedLaunchCompatible(endpoint: string): Promise<void> {
+  const install = readSharedInstall();
+  if (!install || install.url !== endpoint) throw new Error('Shared control is not installed; Codex was not changed');
+  if (install.fingerprint !== await desktopBuildFingerprint()) {
+    throw new Error('Desktop build changed. Shared control is disabled until shared install verifies the new build; Codex was not restarted');
+  }
+  const runtime = readSharedRuntime();
+  if (runtime && runtime.mode !== 'shared') throw new Error('Shared startup previously failed. Run shared install to verify and retry; Codex was not restarted');
+}
+
+export async function openSharedCodexDesktop(): Promise<void> {
+  const install = readSharedInstall();
+  await assertSharedLaunchCompatible(install?.url ?? DEFAULT_SHARED_SERVER_URL);
+  if (desktopAppIsRunning()) throw new Error('Fully quit Codex Desktop first, or use the explicit deck restart action');
+  await execFilePromise('/usr/bin/open', sharedDesktopOpenArguments());
+}
+
+export function sharedDesktopOpenArguments(): string[] {
+  return ['-a', 'ChatGPT', '--env', `CODEX_CLI_PATH=${DESKTOP_LAUNCHER}`,
+    '--env', 'CODEX_APP_SERVER_WS_URL=', '--env', 'CODEX_APP_SERVER_FORCE_CLI=1'];
+}
+
+export async function restartSharedCodexDesktop(endpoint: string): Promise<void> {
+  // Never quit a healthy Desktop before discovering an invalid installation.
+  await assertSharedLaunchCompatible(endpoint);
+  let opened = false;
   try {
-    const args = JSON.parse(execFileSync('/usr/bin/plutil', [
-      '-extract', 'ProgramArguments', 'json', '-o', '-', SERVER_PLIST,
-    ], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }));
-    return JSON.stringify(args) === JSON.stringify([
-      DESKTOP_CODEX, 'app-server', '--listen', endpoint,
-    ]);
-  } catch {
-    return false;
+    await restartCodexDesktop({ ...macCodexDesktopLifecycle,
+      open: async () => { await openSharedCodexDesktop(); opened = true; },
+    });
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const status = desktopConnectionStatus(endpoint);
+      if (status.state === 'connected') return;
+      if (status.state === 'unavailable') throw new Error(status.message);
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+    }
+    throw new Error('Shared Desktop handshake timed out');
+  } catch (error) {
+    // No task requests have been restored yet. A failed activation returns to
+    // clean Desktop, rather than stranding it on a broken endpoint.
+    if (opened) await restartCodexDesktop();
+    else if (!desktopAppIsRunning()) await macCodexDesktopLifecycle.open();
+    throw error;
   }
 }
 
-export async function restartManagedDesktopServer(endpoint: string): Promise<void> {
-  if (!isManagedDesktopServer(endpoint)) {
-    throw new Error('Automatic update is only available for the Desktop server installed by Micro');
+/**
+ * Fail-safe escape hatch: remove shared routing, stop only verified bundled
+ * listeners for the configured endpoint, and reopen Desktop in private mode.
+ */
+export async function recoverPrivateCodex(
+  configPath?: string,
+  requestedEndpoint = DEFAULT_SHARED_SERVER_URL,
+  lifecycle: PrivateCodexRecoveryLifecycle = macPrivateRecoveryLifecycle,
+): Promise<void> {
+  const endpoint = validateSharedEndpoint(requestedEndpoint);
+  await restartCodexDesktop(lifecycle, 40, async () => {
+    await lifecycle.uninstall(configPath);
+    await stopManagedSharedListeners(endpoint, lifecycle);
+  });
+}
+
+export function managedSharedListenerPids(processes: string, requestedEndpoint: string): number[] {
+  const endpoint = validateSharedEndpoint(requestedEndpoint);
+  const escapedEndpoint = endpoint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const listener = new RegExp(`(?:^|\\s)--listen(?:\\s+|=)${escapedEndpoint}(?:\\s|$)`);
+  return [...parseProcessList(processes)]
+    .filter(([, record]) => record.command.startsWith(`${DESKTOP_CODEX} `)
+      && /(?:^|\s)app-server(?:\s|$)/.test(record.command)
+      && listener.test(record.command))
+    .map(([pid]) => pid);
+}
+
+async function stopManagedSharedListeners(
+  endpoint: string,
+  lifecycle: PrivateCodexRecoveryLifecycle,
+): Promise<void> {
+  let remaining = managedSharedListenerPids(lifecycle.readProcesses(), endpoint);
+  for (const pid of remaining) signalIfStillManaged(pid, 'SIGTERM', endpoint, lifecycle);
+  for (let attempt = 0; attempt < 15 && remaining.length; attempt += 1) {
+    await lifecycle.wait(100);
+    remaining = managedSharedListenerPids(lifecycle.readProcesses(), endpoint);
   }
-  await execFilePromise('/bin/launchctl', [
-    'kickstart', '-k', `${launchDomain()}/${SHARED_SERVER_LABEL}`,
-  ]);
-  await waitForHealth(endpoint);
+  // Re-resolve exact command lines before escalation, so PID reuse cannot make
+  // this target an unrelated process.
+  for (const pid of remaining) signalIfStillManaged(pid, 'SIGKILL', endpoint, lifecycle);
+  for (let attempt = 0; attempt < 10 && remaining.length; attempt += 1) {
+    await lifecycle.wait(100);
+    remaining = managedSharedListenerPids(lifecycle.readProcesses(), endpoint);
+  }
+  if (remaining.length) throw new Error('A verified shared Codex listener could not be stopped');
+}
+
+function signalIfStillManaged(
+  pid: number,
+  signal: NodeJS.Signals,
+  endpoint: string,
+  lifecycle: PrivateCodexRecoveryLifecycle,
+): void {
+  if (!managedSharedListenerPids(lifecycle.readProcesses(), endpoint).includes(pid)) return;
+  try { lifecycle.signal(pid, signal); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
+}
+
+function hasDesktopAncestor(pid: number, records: Map<number, { ppid: number; command: string }>): boolean {
+  const visited = new Set<number>();
+  let record = records.get(pid);
+  while (record && !visited.has(record.ppid)) {
+    if (record.command === DESKTOP_APP || record.command.startsWith(`${DESKTOP_APP} `)) return true;
+    visited.add(record.ppid);
+    record = records.get(record.ppid);
+  }
+  return false;
 }
 
 function parseProcessList(processes: string): Map<number, { ppid: number; command: string }> {
@@ -310,8 +429,18 @@ const macCodexDesktopLifecycle: CodexDesktopLifecycle = {
     await execFilePromise('/usr/bin/osascript', ['-e', 'tell application "ChatGPT" to quit']);
   },
   isRunning: desktopAppIsRunning,
-  open: () => execFilePromise('/usr/bin/open', ['-a', 'ChatGPT']),
+  open: () => execFilePromise('/usr/bin/open', ['-a', 'ChatGPT', '--env', 'CODEX_APP_SERVER_WS_URL=',
+    '--env', `CODEX_CLI_PATH=${DESKTOP_CODEX}`, '--env', 'CODEX_APP_SERVER_FORCE_CLI=1']),
   wait: (ms) => new Promise((resolvePromise) => setTimeout(resolvePromise, ms)),
+};
+
+const macPrivateRecoveryLifecycle: PrivateCodexRecoveryLifecycle = {
+  ...macCodexDesktopLifecycle,
+  uninstall: async (configPath) => { await uninstallSharedServer(configPath); },
+  readProcesses: () => execFileSync('/bin/ps', ['-ax', '-o', 'pid=,ppid=,command='], {
+    encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000,
+  }),
+  signal: (pid, signal) => { process.kill(pid, signal); },
 };
 
 function desktopAppIsRunning(): boolean {
@@ -329,7 +458,7 @@ function desktopAppIsRunning(): boolean {
 
 function execFilePromise(command: string, args: string[]): Promise<void> {
   return new Promise((resolvePromise, rejectPromise) => {
-    execFile(command, args, { timeout: 10_000 }, (error) => {
+    execFile(command, args, { timeout: 10_000, env: cleanDesktopEnvironment(process.env) }, (error) => {
       if (error) rejectPromise(error);
       else resolvePromise();
     });
@@ -348,10 +477,11 @@ function desktopStatus(
   endpoint: string,
 ): DesktopConnectionStatus {
   const messages: Record<Exclude<DesktopConnectionState, 'not-required'>, string> = {
-    waiting: 'Open ChatGPT Desktop to enable shared session control.',
+    unavailable: 'Shared control is disabled. Codex remains available in private mode.',
+    waiting: 'Run stream-deck-micro shared open to launch Codex with shared control. Normal Dock launches stay private.',
     connecting: 'Waiting for ChatGPT Desktop to join the shared session server.',
     'restart-required':
-      'Fully quit and reopen ChatGPT Desktop to enable shared control. Refreshing the window is not enough.',
+      'Use shared open after quitting Desktop, or the explicit RESTART CODEX action. Refreshing the window is not enough.',
     connected: 'ChatGPT Desktop and Stream Deck Micro are sharing one session server.',
   };
   return { state, endpoint, message: messages[state] };
@@ -404,28 +534,6 @@ ${args}
 `;
 }
 
-function findCodexBinary(): string {
-  const candidates = [process.env.CODEX_CLI_PATH, DESKTOP_CODEX].filter(Boolean) as string[];
-  for (const candidate of candidates) {
-    try {
-      accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch {
-      // Try the next candidate.
-    }
-  }
-  const fromPath = launchctlOutput(['/usr/bin/which', 'codex']);
-  if (fromPath) {
-    try {
-      accessSync(fromPath, constants.X_OK);
-      return fromPath;
-    } catch {
-      // Fall through to the actionable error.
-    }
-  }
-  throw new Error('Codex executable not found; install Codex Desktop or set CODEX_CLI_PATH');
-}
-
 function launchDomain(): string {
   if (!process.getuid) throw new Error('shared server setup requires macOS');
   return `gui/${process.getuid()}`;
@@ -468,14 +576,6 @@ function readInstallState(): SharedInstallState | null {
   } catch {
     return null;
   }
-}
-
-async function waitForHealth(url: string): Promise<void> {
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    if (await isHealthy(url)) return;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`shared Codex App Server did not become healthy at ${url}`);
 }
 
 async function isHealthy(url: string): Promise<boolean> {

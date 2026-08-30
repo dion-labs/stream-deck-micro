@@ -308,27 +308,33 @@ describe('DeckController', () => {
     c.close();
   });
 
-  it('shows one central restart key and makes every other key inert during recovery', () => {
+  it('offers shared retry and fail-safe private recovery while every normal key is inert', () => {
     const deck = new FakeDeck();
     const c = new DeckController(deck, workflows, sleepSettings);
     c.render(Array.from({ length: 6 }, (_, i) => slot(i, 'idle')), 0);
     const restarts: string[] = [];
+    const recoveries: string[] = [];
     const actions: unknown[] = [];
     c.on('restartCodex', () => restarts.push('restart'));
+    c.on('recoverCodex', () => recoveries.push('private'));
     c.on('action', (action) => actions.push(action));
 
     c.setDesktopRecovery('restart-required');
     expect(c.status().desktopRecovery).toBe('restart-required');
-    expect([...deck.fills.keys()]).toEqual([7]);
+    expect([...deck.fills.keys()]).toEqual([6, 7]);
 
     deck.press(0);
+    deck.press(6);
     deck.press(7);
     expect(restarts).toEqual(['restart']);
+    expect(recoveries).toEqual(['private']);
     expect(actions).toEqual([]);
 
     c.setDesktopRecovery('restarting');
+    deck.press(6);
     deck.press(7);
     expect(restarts).toEqual(['restart']);
+    expect(recoveries).toEqual(['private']);
 
     c.setDesktopRecovery(null);
     expect(c.status().desktopRecovery).toBeNull();
@@ -360,20 +366,38 @@ describe('DeckController', () => {
     c.setDesktopRecovery('update-required');
     vi.advanceTimersByTime(20 * 60_000);
     expect(c.status().mode).toBe('awake');
-    expect([...deck.fills.keys()]).toEqual([7]);
-    for (let key = 0; key < 15; key += 1) if (key !== 7) deck.press(key);
+    expect([...deck.fills.keys()]).toEqual([6, 7]);
+    for (let key = 0; key < 15; key += 1) if (key !== 6 && key !== 7) deck.press(key);
     expect(actions).toEqual([]);
     expect(recoveries).toEqual([]);
-    deck.press(7);
-    deck.press(7);
+    deck.press(6);
+    deck.press(6);
     expect(recoveries).toEqual(['update']);
     expect(c.status().desktopRecovery).toBe('updating');
     expect([...deck.fills.keys()]).toEqual([7]);
     c.setDesktopRecovery('update-required');
-    deck.press(7);
+    deck.press(6);
     expect(recoveries).toEqual(['update', 'update']);
     c.setDesktopRecovery(null);
     expect(deck.fills.size).toBeGreaterThan(1);
+    c.close();
+  });
+
+  it('shows private recovery progress and completion as inert central states', () => {
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    const recoveries: string[] = [];
+    c.on('recoverCodex', () => recoveries.push('private'));
+    c.setDesktopRecovery('shared-error');
+    expect([...deck.fills.keys()]).toEqual([7]);
+    deck.press(7);
+    expect(recoveries).toEqual(['private']);
+    c.setDesktopRecovery('recovering-private');
+    deck.press(7);
+    expect(recoveries).toEqual(['private']);
+    c.setDesktopRecovery('private-ready');
+    deck.press(7);
+    expect(recoveries).toEqual(['private']);
     c.close();
   });
 });

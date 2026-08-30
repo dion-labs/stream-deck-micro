@@ -5,6 +5,15 @@ import type { DaemonStatus } from './types.js';
 const status: DaemonStatus = {
   selectedIndex: 0,
   surface: 'marketplace',
+  capabilities: {
+    mode: 'live',
+    label: 'Live control',
+    reason: 'Shared sessions are ready.',
+    canNavigateSessions: true,
+    canConfigure: true,
+    canControlSessions: true,
+    canListSessions: true,
+  },
   slots: Array.from({ length: 6 }, (_, index) => ({
     index,
     state: index === 0 ? 'running' : 'idle',
@@ -26,6 +35,8 @@ const status: DaemonStatus = {
     ],
     attention: [],
     desktopRecovery: null,
+    capabilityMode: 'live',
+    actionFeedback: null,
   },
 };
 
@@ -59,6 +70,48 @@ describe('Marketplace key rendering', () => {
     expect(renderKey(attached, 0, true)).toContain('ATTACHED');
   });
 
+  it('distinguishes navigation-only sessions and disables control actions', () => {
+    const navigation = {
+      ...status,
+      capabilities: {
+        ...status.capabilities!,
+        mode: 'navigation-only' as const,
+        canControlSessions: false,
+        canListSessions: false,
+      },
+    };
+    expect(renderKey(navigation, 0, true)).toContain('NAV ONLY');
+    expect(renderKey(navigation, 0, true)).toContain('#185B64');
+    expect(renderKey(navigation, 14, true)).toContain('LIVE OFF');
+  });
+
+  it('renders immediate blocked-action feedback', () => {
+    const blocked = {
+      ...status,
+      deck: {
+        ...status.deck,
+        actionFeedback: {
+          keyIndex: 14,
+          outcome: 'blocked' as const,
+          message: 'LIVE OFF',
+          expiresAt: Date.now() + 1_000,
+        },
+      },
+    };
+    expect(renderKey(blocked, 14, false)).toContain('BLOCKED');
+    expect(renderKey(blocked, 14, false)).toContain('LIVE OFF');
+  });
+
+  it('keeps rendering with a pre-heartbeat bridge during rolling upgrades', () => {
+    const legacy = {
+      ...status,
+      capabilities: undefined,
+      deck: { ...status.deck, capabilityMode: undefined, actionFeedback: undefined },
+    };
+    expect(renderKey(legacy, 0, true)).toContain('WORKING');
+    expect(renderKey(legacy, 14, true)).toContain('PROMPT');
+  });
+
   it('blacks out every action while simulated sleep is active', () => {
     const asleep = { ...status, deck: { ...status.deck, mode: 'asleep' as const } };
     expect(renderKey(asleep, 14, false)).not.toContain('DO IT');
@@ -82,12 +135,14 @@ describe('Marketplace key rendering', () => {
     expect(renderKey(attention, 14, true)).not.toContain('DO IT');
   });
 
-  it('replaces the surface with one central Codex recovery key', () => {
+  it('offers shared retry and a prominent private Codex recovery key', () => {
     const recovery = {
       ...status,
       deck: { ...status.deck, desktopRecovery: 'restart-required' as const },
     };
-    expect(renderKey(recovery, 7, false)).toContain('RESTART');
+    expect(renderKey(recovery, 6, false)).toContain('RETRY');
+    expect(renderKey(recovery, 6, false)).toContain('SHARED');
+    expect(renderKey(recovery, 7, false)).toContain('RECOVER');
     expect(renderKey(recovery, 7, false)).toContain('CODEX');
     expect(renderKey(recovery, 0, false)).not.toContain('RESTART');
 
@@ -98,14 +153,24 @@ describe('Marketplace key rendering', () => {
     expect(renderKey(restarting, 7, false)).toContain('OPENING');
   });
 
-  it('renders update and updating labels only on the central recovery key', () => {
+  it('renders update/recovery choices and collapses to one busy key', () => {
     for (const state of ['update-required', 'updating'] as const) {
       const recovery = { ...status, deck: { ...status.deck, desktopRecovery: state } };
-      expect(renderKey(recovery, 7, false)).toContain(state === 'updating' ? 'UPDATING' : 'UPDATE');
-      expect(renderKey(recovery, 7, false)).toContain('CODEX');
+      expect(renderKey(recovery, 7, false)).toContain(state === 'updating' ? 'UPDATING' : 'RECOVER');
+      if (state === 'update-required') expect(renderKey(recovery, 6, false)).toContain('UPDATE');
       for (let key = 0; key < 15; key += 1) {
-        if (key !== 7) expect(renderKey(recovery, key, false)).not.toContain('<text');
+        if (key !== 7 && !(key === 6 && state === 'update-required')) {
+          expect(renderKey(recovery, key, false)).not.toContain('<text');
+        }
       }
     }
+  });
+
+  it('shows private recovery failure, progress, and success states', () => {
+    expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'shared-error' } }, 7, false)).toContain('RECOVER');
+    expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'recovering-private' } }, 7, false)).toContain('RECOVERING');
+    const ready = renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'private-ready' } }, 7, false);
+    expect(ready).toContain('READY');
+    expect(ready).toContain('PRIVATE');
   });
 });
