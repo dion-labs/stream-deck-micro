@@ -50,6 +50,16 @@ describe('Control Room server', () => {
     expect(html).toMatch(/script nonce="[^"]+"/);
   });
 
+  it('serves the packaged Control Room character assets', async () => {
+    server = await startAdminServer(0, async () => ({}));
+    const response = await fetch(`${server.url}/assets/console-spirit.webp`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe('image/webp');
+    expect(response.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(10_000);
+  });
+
   it('rejects API calls without the page token', async () => {
     server = await startAdminServer(0, async () => ({}));
     const response = await fetch(`${server.url}/api/status`);
