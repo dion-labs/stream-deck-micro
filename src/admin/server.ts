@@ -8,6 +8,12 @@ export type ApiHandler = (cmd: string, args: Record<string, unknown>) => Promise
 const MAX_BODY_BYTES = 1_000_000;
 export const HOSTED_HEALTH_PATH = '/api/hosted/health';
 
+const ADMIN_ASSETS = new Map([
+  ['/assets/console-spirit.webp', new URL('./assets/console-spirit.webp', import.meta.url)],
+  ['/assets/curator.webp', new URL('./assets/curator.webp', import.meta.url)],
+  ['/assets/operator.webp', new URL('./assets/operator.webp', import.meta.url)],
+]);
+
 const HOSTED_CONTROL_ROOM_ORIGINS = new Set([
   'https://deck.dionlabs.ai',
   'http://127.0.0.1:5173',
@@ -110,6 +116,16 @@ async function route(
     if (req.method === 'GET' && (path === '/' || path === '/index.html')) {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       res.end(renderAdminHtml(context.apiToken, context.nonce));
+      return;
+    }
+
+    const asset = ADMIN_ASSETS.get(path);
+    if (req.method === 'GET' && asset) {
+      res.writeHead(200, {
+        'content-type': 'image/webp',
+        'cache-control': 'public, max-age=86400',
+      });
+      res.end(readFileSync(asset));
       return;
     }
 

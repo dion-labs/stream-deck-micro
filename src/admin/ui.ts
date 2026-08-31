@@ -259,11 +259,12 @@ export const ADMIN_HTML: string = `<!doctype html>
   .brand-lockup { display: flex; align-items: center; gap: 13px; min-width: 0; }
   .logo {
     width: 42px; height: 42px; border-radius: 13px;
-    background: #12160f; border: 1px solid #3c4435;
+    background: radial-gradient(circle at 50% 58%, rgba(200,255,99,.16), transparent 58%), #12160f;
+    border: 1px solid #3c4435; overflow: hidden;
     box-shadow: inset 0 1px rgba(255,255,255,.06), 0 12px 30px rgba(0,0,0,.35);
   }
-  .logo::before { content: ''; position: absolute; inset: 10px; border: 1px solid rgba(200,255,99,.55); border-radius: 6px; }
-  .logo::after { inset: 15px 12px; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--accent) 0 2px, transparent 2px 5px); }
+  .logo::before, .logo::after { display: none; }
+  .logo img { width: 58px; height: 42px; max-width: none; object-fit: contain; transform: translateX(-8px) scale(1.08); filter: drop-shadow(0 0 10px rgba(200,255,99,.22)); }
   .brand-copy { min-width: 0; }
   header h1 { font-size: 15px; letter-spacing: -.1px; line-height: 1.15; }
   .brand-copy p { margin: 4px 0 0; color: var(--faint); font-size: 11px; letter-spacing: .11em; text-transform: uppercase; }
@@ -312,6 +313,20 @@ export const ADMIN_HTML: string = `<!doctype html>
   .panel-head h2 { color: var(--text); margin: 0; font-size: 21px; text-transform: none; letter-spacing: -.45px; line-height: 1.1; font-weight: 620; }
   .panel-head p:last-child { color: var(--dim); max-width: 380px; margin: 8px 0 0; font-size: 12.5px; line-height: 1.5; }
   .panel-code { margin-left: auto; color: var(--faint); font: 10px/1.2 ui-monospace, "SFMono-Regular", monospace; white-space: nowrap; padding-top: 3px; }
+  .panel-aside { margin-left: auto; display: flex; align-items: center; gap: 10px; flex: none; }
+  .crew-chip {
+    width: 68px; height: 54px; position: relative; overflow: hidden; border-radius: 13px;
+    border: 1px solid #343a30; background: linear-gradient(145deg, #1b2118, #0c0f0b);
+    box-shadow: inset 0 1px rgba(255,255,255,.045), 0 12px 28px rgba(0,0,0,.24);
+  }
+  .crew-chip::after { content: ''; position: absolute; inset: auto 8px 6px; height: 1px; background: rgba(200,255,99,.52); }
+  .crew-chip img { position: absolute; display: block; filter: drop-shadow(0 8px 12px rgba(0,0,0,.38)); }
+  .crew-chip.operator img { width: 58px; left: 4px; top: -11px; }
+  .crew-chip.curator { background: linear-gradient(145deg, #181e20, #0c0f10); }
+  .crew-chip.curator img { width: 59px; left: 5px; top: -10px; }
+  .crew-role { display: flex; flex-direction: column; gap: 3px; min-width: 92px; }
+  .crew-role b { color: var(--text); font: 9px/1 ui-monospace, "SFMono-Regular", monospace; letter-spacing: .12em; }
+  .crew-role small { color: var(--faint); font-size: 9px; white-space: nowrap; }
   .deck-card { min-width: 0; }
   .control-card { position: sticky; top: 16px; min-width: 0; }
 
@@ -400,6 +415,9 @@ export const ADMIN_HTML: string = `<!doctype html>
     .panel-head { margin-bottom: 14px; }
     .panel-head h2 { font-size: 18px; }
     .panel-head p:last-child { display: none; }
+    .crew-role { display: none; }
+    .crew-chip { width: 52px; height: 44px; }
+    .crew-chip.operator img, .crew-chip.curator img { width: 47px; top: -7px; left: 2px; }
     .device-shell { min-width: 520px; padding: 31px 26px 32px; }
     .deck { gap: 11px; }
     .legend { gap: 9px; }
@@ -416,7 +434,7 @@ export const ADMIN_HTML: string = `<!doctype html>
 <body>
 <header>
   <div class="brand-lockup">
-    <div class="logo"></div>
+    <div class="logo"><img src="/assets/console-spirit.webp" alt=""></div>
     <div class="brand-copy">
       <h1>Stream Deck Micro</h1>
       <p>Local agent command center</p>
@@ -441,7 +459,7 @@ export const ADMIN_HTML: string = `<!doctype html>
   <div class="card deck-card">
     <div class="panel-head">
       <div><p class="panel-kicker">Physical surface</p><h2>Your agents, at a glance.</h2><p>Configure safely, then switch to Live control when you want this preview to behave like the hardware.</p></div>
-      <span class="panel-code">MK.2 / 15 KEY</span>
+      <div class="panel-aside"><div class="crew-chip operator"><img src="/assets/operator.webp" alt=""></div><span class="crew-role"><b>THE OPERATOR</b><small>Physical surface</small></span><span class="panel-code">MK.2 / 15 KEY</span></div>
     </div>
     <div class="device-viewport">
       <div class="device-shell">
@@ -464,6 +482,7 @@ export const ADMIN_HTML: string = `<!doctype html>
   <div class="card control-card">
     <div class="panel-head">
       <div><p class="panel-kicker">Control Room</p><h2>Shape the surface.</h2><p>Inspect sessions, assign slots, and tune the prompts behind every workflow key.</p></div>
+      <div class="panel-aside"><div class="crew-chip curator"><img src="/assets/curator.webp" alt=""></div><span class="crew-role"><b>THE CURATOR</b><small>Orchestration layer</small></span></div>
     </div>
     <div class="modebar">
       <div class="mode-switch" role="group" aria-label="Control Room interaction mode">

@@ -44,7 +44,8 @@
   },
   "scripts": {
     "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
-    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "build": "npm run clean && tsc -p tsconfig.build.json && npm run copy:admin-assets",
+    "copy:admin-assets": "node -e \"require('node:fs').cpSync('src/admin/assets', 'dist/admin/assets', { recursive: true })\"",
     "start": "node dist/cli/stream-deck-micro.js start",
     "dev": "tsx src/main.ts",
     "sdm": "tsx src/cli/sdm.ts",
