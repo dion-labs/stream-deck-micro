@@ -441,7 +441,7 @@ export class DeckController {
       this.device.fillImage(
         RECOVERY_KEY_INDEX,
         renderActionKey(
-          updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER',
+          updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE',
           privateReady ? [37, 108, 72] : busy ? [62, 74, 96] : [18, 98, 127],
           privateReady ? 'PRIVATE' : 'CODEX',
         ),

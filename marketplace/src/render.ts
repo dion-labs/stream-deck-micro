@@ -45,7 +45,7 @@ export function renderKey(
     return tile(
       privateReady ? '#17482F' : busy ? '#293142' : '#0E526A',
       privateReady ? '#256C48' : busy ? '#4A5A73' : '#12627F',
-      updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER',
+      updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE',
       privateReady ? 'PRIVATE' : 'CODEX',
       false,
       !busy,

@@ -217,6 +217,7 @@ describe('Control Room server', () => {
     expect(html).toContain("recovery === 'updating'");
     expect(html).toContain("api('desktop/recover'");
     expect(html).toContain("recovery === 'private-ready'");
+    expect(html).toContain("privateReady ? 'READY' : 'PRIVATE'");
     expect(html).toContain('stop verified leftover listeners');
     expect(html).toContain('navigation only');
     expect(html).toContain('Copy diagnostics');
