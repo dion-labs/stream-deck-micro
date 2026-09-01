@@ -135,14 +135,14 @@ describe('Marketplace key rendering', () => {
     expect(renderKey(attention, 14, true)).not.toContain('DO IT');
   });
 
-  it('offers shared retry and a prominent private Codex recovery key', () => {
+  it('offers shared retry and a clearly labelled private Codex fallback', () => {
     const recovery = {
       ...status,
       deck: { ...status.deck, desktopRecovery: 'restart-required' as const },
     };
     expect(renderKey(recovery, 6, false)).toContain('RETRY');
     expect(renderKey(recovery, 6, false)).toContain('SHARED');
-    expect(renderKey(recovery, 7, false)).toContain('RECOVER');
+    expect(renderKey(recovery, 7, false)).toContain('PRIVATE');
     expect(renderKey(recovery, 7, false)).toContain('CODEX');
     expect(renderKey(recovery, 0, false)).not.toContain('RESTART');
 
@@ -156,7 +156,7 @@ describe('Marketplace key rendering', () => {
   it('renders update/recovery choices and collapses to one busy key', () => {
     for (const state of ['update-required', 'updating'] as const) {
       const recovery = { ...status, deck: { ...status.deck, desktopRecovery: state } };
-      expect(renderKey(recovery, 7, false)).toContain(state === 'updating' ? 'UPDATING' : 'RECOVER');
+      expect(renderKey(recovery, 7, false)).toContain(state === 'updating' ? 'UPDATING' : 'PRIVATE');
       if (state === 'update-required') expect(renderKey(recovery, 6, false)).toContain('UPDATE');
       for (let key = 0; key < 15; key += 1) {
         if (key !== 7 && !(key === 6 && state === 'update-required')) {
@@ -167,7 +167,7 @@ describe('Marketplace key rendering', () => {
   });
 
   it('shows private recovery failure, progress, and success states', () => {
-    expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'shared-error' } }, 7, false)).toContain('RECOVER');
+    expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'shared-error' } }, 7, false)).toContain('PRIVATE');
     expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'recovering-private' } }, 7, false)).toContain('RECOVERING');
     const ready = renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'private-ready' } }, 7, false);
     expect(ready).toContain('READY');

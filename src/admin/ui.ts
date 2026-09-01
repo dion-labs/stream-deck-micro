@@ -684,7 +684,7 @@ function renderDeck(status) {
       var privateReady = recovery === 'private-ready';
       var busy = restarting || updating || recoveringPrivate;
       var recoveryVisual = keyEl(
-        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'RECOVER') + '</span><span class="sub">' + (privateReady ? 'private' : 'Codex') + '</span>',
+        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE') + '</span><span class="sub">' + (privateReady ? 'private' : 'Codex') + '</span>',
         'act ' + (busy ? 'restarting' : 'restart'),
         busy || privateReady ? null : function() {
           return api('desktop/recover', {}).then(function() { toast('disabling shared mode and recovering Codex'); });
