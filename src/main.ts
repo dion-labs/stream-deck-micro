@@ -39,8 +39,10 @@ import { desktopRecoveryState } from './desktopRecovery.js';
 import {
   desktopConnectionStatus,
   recoverPrivateCodex,
+  installSharedServer,
   restartSharedCodexDesktop,
   assertSharedLaunchCompatible,
+  sharedLaunchNeedsVerification,
   DEFAULT_SHARED_SERVER_URL,
   type DesktopConnectionStatus,
 } from './sharedServer.js';
@@ -187,6 +189,9 @@ export async function runDaemon(
   let restorePromise: Promise<void> | null = null;
   let restoreError: string | null = null;
   let desktopRestartPromise: Promise<void> | null = null;
+  let sharedVerifying = false;
+  let sharedVerificationRequired = false;
+  let sharedVerificationChecked = false;
   let serverUpdating = false;
   let serverUpdateError: string | null = null;
   let privateRecoveryPromise: Promise<void> | null = null;
@@ -555,6 +560,18 @@ export async function runDaemon(
       return;
     }
     const next = desktopConnectionStatus(sharedEndpoint);
+    if (next.state === 'restart-required' && !sharedVerificationChecked) {
+      try {
+        sharedVerificationRequired = await sharedLaunchNeedsVerification(sharedEndpoint);
+        sharedVerificationChecked = true;
+        if (sharedVerificationRequired) log('Codex Desktop build changed; explicit compatibility verification required');
+      } catch (error) {
+        log('Codex Desktop build verification check deferred:', error instanceof Error ? error.message : String(error));
+      }
+    } else if (next.state !== 'restart-required') {
+      sharedVerificationChecked = false;
+      if (next.state === 'connected') sharedVerificationRequired = false;
+    }
     if (stateHydrated && (next.state !== 'connected' || appServer.transportClosed)) {
       persistState();
       persisted = loadState() ?? persisted;
@@ -590,6 +607,8 @@ export async function runDaemon(
       privateComplete: privateRecoveryComplete,
       serverUpdating,
       updateRequired: needsServerUpdate(),
+      sharedVerifying,
+      verificationRequired: sharedVerificationRequired,
       sharedRestarting: desktopRestartPromise !== null,
       connectionState: desktopConnection.state,
       restoreError,
@@ -633,6 +652,7 @@ export async function runDaemon(
 
   function beginDesktopRestart(): Promise<void> {
     if (desktopRestartPromise) return desktopRestartPromise;
+    if (sharedVerificationRequired) return beginSharedVerification();
     if (needsServerUpdate()) return beginServerUpdate();
     if (!sharedEndpoint || desktopConnection.state !== 'restart-required') {
       return Promise.reject(new Error('Codex Desktop does not currently require a shared-mode restart'));
@@ -654,6 +674,46 @@ export async function runDaemon(
       log('Codex Desktop restart failed:', error instanceof Error ? error.message : String(error));
       throw error;
     }).finally(() => {
+      desktopRestartPromise = null;
+      desktopConnection = sharedEndpoint
+        ? desktopConnectionStatus(sharedEndpoint)
+        : desktopConnection;
+      syncDesktopRecoverySurface();
+    });
+    syncDesktopRecoverySurface();
+    return desktopRestartPromise;
+  }
+
+  function beginSharedVerification(): Promise<void> {
+    if (desktopRestartPromise) return desktopRestartPromise;
+    if (!sharedEndpoint || !sharedVerificationRequired) {
+      return Promise.reject(new Error('The installed Codex Desktop build does not require verification'));
+    }
+    sharedVerifying = true;
+    desktopRestartPromise = (async () => {
+      syncDesktopRecoverySurface();
+      log('Codex Desktop compatibility verification requested from the deck');
+      await installSharedServer(sourcePath ?? undefined, sharedEndpoint);
+      sharedVerificationRequired = false;
+      sharedVerificationChecked = true;
+      log('Codex Desktop build verified; restarting into shared control');
+      await restartSharedCodexDesktop(sharedEndpoint);
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await refreshDesktopConnection();
+        if (desktopConnection.state === 'connected' && stateHydrated) {
+          log('Verified Codex Desktop build connected; session buttons restored');
+          return;
+        }
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+      }
+      throw new Error('Verified Codex Desktop reopened but did not join the shared server');
+    })().catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      log('Codex Desktop compatibility verification failed:', message);
+      notify('Micro could not verify Codex', message);
+      throw error;
+    }).finally(() => {
+      sharedVerifying = false;
       desktopRestartPromise = null;
       desktopConnection = sharedEndpoint
         ? desktopConnectionStatus(sharedEndpoint)

@@ -342,6 +342,29 @@ describe('DeckController', () => {
     c.close();
   });
 
+  it('turns an unverified Desktop build into an explicit verify action', () => {
+    const deck = new FakeDeck();
+    const c = new DeckController(deck, workflows, sleepSettings);
+    const restarts: string[] = [];
+    const recoveries: string[] = [];
+    c.on('restartCodex', () => restarts.push('verify'));
+    c.on('recoverCodex', () => recoveries.push('private'));
+
+    c.setDesktopRecovery('verification-required');
+    expect([...deck.fills.keys()]).toEqual([6, 7]);
+    deck.press(6);
+    deck.press(7);
+    expect(restarts).toEqual(['verify']);
+    expect(recoveries).toEqual(['private']);
+
+    c.setDesktopRecovery('verifying');
+    deck.press(6);
+    deck.press(7);
+    expect(restarts).toEqual(['verify']);
+    expect(recoveries).toEqual(['private']);
+    c.close();
+  });
+
   it('does not auto-sleep while a turn is active', () => {
     vi.useFakeTimers();
     const deck = new FakeDeck();

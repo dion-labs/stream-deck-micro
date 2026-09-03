@@ -662,14 +662,15 @@ function renderDeck(status) {
   var recovery = controlMode !== 'configure' && status.deck && status.deck.desktopRecovery;
   if (recovery) {
     for (var recoveryKey = 0; recoveryKey < 15; recoveryKey++) {
-      var canRetryShared = recovery === 'restart-required' || recovery === 'update-required';
+      var canRetryShared = recovery === 'restart-required' || recovery === 'verification-required' || recovery === 'update-required';
       if (recoveryKey === 6 && canRetryShared) {
         var updateNeeded = recovery === 'update-required';
+        var verificationNeeded = recovery === 'verification-required';
         var retryVisual = keyEl(
-          '<span class="t">' + (updateNeeded ? 'UPDATE' : 'RETRY') + '</span><span class="sub">shared</span>',
+          '<span class="t">' + (verificationNeeded ? 'VERIFY' : updateNeeded ? 'UPDATE' : 'RETRY') + '</span><span class="sub">' + (verificationNeeded ? 'Codex' : 'shared') + '</span>',
           'act restart',
-          function() { return api('desktop/restart', {}).then(function() { toast('retrying shared Codex control'); }); },
-          updateNeeded ? 'Update and retry shared control. Active turns may be interrupted.' : 'Retry Codex Desktop on the shared server.'
+          function() { return api('desktop/restart', {}).then(function() { toast(verificationNeeded ? 'verifying the updated Codex build' : 'retrying shared Codex control'); }); },
+          verificationNeeded ? 'Verify this Codex Desktop build before restarting shared control.' : updateNeeded ? 'Update and retry shared control. Active turns may be interrupted.' : 'Retry Codex Desktop on the shared server.'
         );
         deck.appendChild(retryVisual.root);
         continue;
@@ -680,11 +681,12 @@ function renderDeck(status) {
       }
       var restarting = recovery === 'restarting';
       var updating = recovery === 'updating';
+      var verifying = recovery === 'verifying';
       var recoveringPrivate = recovery === 'recovering-private';
       var privateReady = recovery === 'private-ready';
-      var busy = restarting || updating || recoveringPrivate;
+      var busy = restarting || updating || verifying || recoveringPrivate;
       var recoveryVisual = keyEl(
-        '<span class="t">' + (updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE') + '</span><span class="sub">' + (privateReady ? 'private' : 'Codex') + '</span>',
+        '<span class="t">' + (updating ? 'UPDATING' : verifying ? 'VERIFYING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE') + '</span><span class="sub">' + (privateReady ? 'private' : 'Codex') + '</span>',
         'act ' + (busy ? 'restarting' : 'restart'),
         busy || privateReady ? null : function() {
           return api('desktop/recover', {}).then(function() { toast('disabling shared mode and recovering Codex'); });

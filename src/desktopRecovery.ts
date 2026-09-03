@@ -6,6 +6,8 @@ export interface DesktopRecoveryInputs {
   privateComplete: boolean;
   serverUpdating: boolean;
   updateRequired: boolean;
+  sharedVerifying: boolean;
+  verificationRequired: boolean;
   sharedRestarting: boolean;
   connectionState: DesktopConnectionState;
   restoreError: string | null;
@@ -17,6 +19,8 @@ export function desktopRecoveryState(input: DesktopRecoveryInputs): DesktopRecov
   if (input.privateRecovering) return 'recovering-private';
   if (input.privateComplete) return 'private-ready';
   if (input.serverUpdating) return 'updating';
+  if (input.sharedVerifying) return 'verifying';
+  if (input.verificationRequired) return 'verification-required';
   if (input.updateRequired) return 'update-required';
   if (input.sharedRestarting) return 'restarting';
   if (input.connectionState === 'restart-required') return 'restart-required';

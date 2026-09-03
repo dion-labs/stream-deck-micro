@@ -166,6 +166,23 @@ describe('Marketplace key rendering', () => {
     }
   });
 
+  it('distinguishes Codex verification from an ordinary shared retry', () => {
+    const required = {
+      ...status,
+      deck: { ...status.deck, desktopRecovery: 'verification-required' as const },
+    };
+    expect(renderKey(required, 6, false)).toContain('VERIFY');
+    expect(renderKey(required, 6, false)).toContain('CODEX');
+    expect(renderKey(required, 7, false)).toContain('PRIVATE');
+
+    const verifying = {
+      ...status,
+      deck: { ...status.deck, desktopRecovery: 'verifying' as const },
+    };
+    expect(renderKey(verifying, 7, false)).toContain('VERIFYING');
+    expect(renderKey(verifying, 6, false)).not.toContain('<text');
+  });
+
   it('shows private recovery failure, progress, and success states', () => {
     expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'shared-error' } }, 7, false)).toContain('PRIVATE');
     expect(renderKey({ ...status, deck: { ...status.deck, desktopRecovery: 'recovering-private' } }, 7, false)).toContain('RECOVERING');

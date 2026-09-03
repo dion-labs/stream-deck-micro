@@ -215,6 +215,9 @@ describe('Control Room server', () => {
     expect(html).toContain('Update shared Codex backend');
     expect(html).toContain('may interrupt active turns');
     expect(html).toContain("recovery === 'updating'");
+    expect(html).toContain("recovery === 'verification-required'");
+    expect(html).toContain("recovery === 'verifying'");
+    expect(html).toContain("verificationNeeded ? 'VERIFY'");
     expect(html).toContain("api('desktop/recover'");
     expect(html).toContain("recovery === 'private-ready'");
     expect(html).toContain("privateReady ? 'READY' : 'PRIVATE'");

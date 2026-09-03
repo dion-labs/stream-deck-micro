@@ -299,6 +299,13 @@ export async function assertSharedLaunchCompatible(endpoint: string): Promise<vo
   if (runtime && runtime.mode !== 'shared') throw new Error('Shared startup previously failed. Run shared install to verify and retry; Codex was not restarted');
 }
 
+/** Detect a changed Desktop bundle without quitting or launching either app. */
+export async function sharedLaunchNeedsVerification(endpoint: string): Promise<boolean> {
+  const install = readSharedInstall();
+  if (!install || install.url !== endpoint) return false;
+  return install.fingerprint !== await desktopBuildFingerprint();
+}
+
 export async function openSharedCodexDesktop(): Promise<void> {
   const install = readSharedInstall();
   await assertSharedLaunchCompatible(install?.url ?? DEFAULT_SHARED_SERVER_URL);
