@@ -6,6 +6,8 @@ const healthy: DesktopRecoveryInputs = {
   privateComplete: false,
   serverUpdating: false,
   updateRequired: false,
+  sharedVerifying: false,
+  verificationRequired: false,
   sharedRestarting: false,
   connectionState: 'connected',
   restoreError: null,
@@ -21,6 +23,15 @@ describe('desktop recovery surface decision', () => {
   it('keeps shared retry available when Desktop is running privately', () => {
     expect(desktopRecoveryState({ ...healthy, connectionState: 'restart-required' }))
       .toBe('restart-required');
+  });
+
+  it('makes an unverified Desktop update explicit before restart', () => {
+    expect(desktopRecoveryState({
+      ...healthy, verificationRequired: true, connectionState: 'restart-required',
+    })).toBe('verification-required');
+    expect(desktopRecoveryState({
+      ...healthy, sharedVerifying: true, verificationRequired: true,
+    })).toBe('verifying');
   });
 
   it('makes private recovery progress and completion authoritative', () => {

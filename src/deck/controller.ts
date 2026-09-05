@@ -32,7 +32,8 @@ export interface DeckEvents {
 export type DeckMode = 'awake' | 'attention' | 'asleep';
 export type AttentionState = 'done' | 'error';
 export type DesktopRecoveryState =
-  | 'restart-required' | 'restarting' | 'update-required' | 'updating'
+  | 'restart-required' | 'restarting' | 'verification-required' | 'verifying'
+  | 'update-required' | 'updating'
   | 'shared-error' | 'recovering-private' | 'private-ready';
 
 export interface DeckStatus {
@@ -397,9 +398,9 @@ export class DeckController {
 
   private onDown(keyIndex: number): void {
     if (this.desktopRecovery) {
-      if (keyIndex === SHARED_RETRY_KEY_INDEX && ['restart-required', 'update-required'].includes(this.desktopRecovery)) {
+      if (keyIndex === SHARED_RETRY_KEY_INDEX && ['restart-required', 'verification-required', 'update-required'].includes(this.desktopRecovery)) {
         this.emitter.emit('restartCodex');
-      } else if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'update-required', 'shared-error'].includes(this.desktopRecovery)) {
+      } else if (keyIndex === RECOVERY_KEY_INDEX && ['restart-required', 'verification-required', 'update-required', 'shared-error'].includes(this.desktopRecovery)) {
         this.emitter.emit('recoverCodex');
       }
       return;
@@ -427,21 +428,27 @@ export class DeckController {
     if (this.desktopRecovery) {
       const restarting = this.desktopRecovery === 'restarting';
       const updating = this.desktopRecovery === 'updating';
+      const verifying = this.desktopRecovery === 'verifying';
+      const verificationRequired = this.desktopRecovery === 'verification-required';
       const recoveringPrivate = this.desktopRecovery === 'recovering-private';
       const privateReady = this.desktopRecovery === 'private-ready';
-      const canRetryShared = ['restart-required', 'update-required'].includes(this.desktopRecovery);
-      const busy = restarting || updating || recoveringPrivate;
+      const canRetryShared = ['restart-required', 'verification-required', 'update-required'].includes(this.desktopRecovery);
+      const busy = restarting || updating || verifying || recoveringPrivate;
       if (canRetryShared) {
         this.device.fillImage(
           SHARED_RETRY_KEY_INDEX,
-          renderActionKey(this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY', [180, 108, 20], 'SHARED'),
+          renderActionKey(
+            verificationRequired ? 'VERIFY' : this.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY',
+            [180, 108, 20],
+            verificationRequired ? 'CODEX' : 'SHARED',
+          ),
           { format: 'rgba' },
         );
       }
       this.device.fillImage(
         RECOVERY_KEY_INDEX,
         renderActionKey(
-          updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE',
+          updating ? 'UPDATING' : verifying ? 'VERIFYING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE',
           privateReady ? [37, 108, 72] : busy ? [62, 74, 96] : [18, 98, 127],
           privateReady ? 'PRIVATE' : 'CODEX',
         ),

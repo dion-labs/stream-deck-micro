@@ -33,19 +33,26 @@ export function renderKey(
   if (status.deck.desktopRecovery) {
     const restarting = status.deck.desktopRecovery === 'restarting';
     const updating = status.deck.desktopRecovery === 'updating';
+    const verifying = status.deck.desktopRecovery === 'verifying';
+    const verificationRequired = status.deck.desktopRecovery === 'verification-required';
     const recoveringPrivate = status.deck.desktopRecovery === 'recovering-private';
     const privateReady = status.deck.desktopRecovery === 'private-ready';
     const canRetryShared = status.deck.desktopRecovery === 'restart-required'
+      || verificationRequired
       || status.deck.desktopRecovery === 'update-required';
     if (keyIndex === 6 && canRetryShared) {
-      return tile('#6A3B0A', '#B46C14', status.deck.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY', 'SHARED', false, true);
+      return tile(
+        '#6A3B0A', '#B46C14',
+        verificationRequired ? 'VERIFY' : status.deck.desktopRecovery === 'update-required' ? 'UPDATE' : 'RETRY',
+        verificationRequired ? 'CODEX' : 'SHARED', false, true,
+      );
     }
     if (keyIndex !== 7) return blank('#000000');
-    const busy = restarting || updating || recoveringPrivate;
+    const busy = restarting || updating || verifying || recoveringPrivate;
     return tile(
       privateReady ? '#17482F' : busy ? '#293142' : '#0E526A',
       privateReady ? '#256C48' : busy ? '#4A5A73' : '#12627F',
-      updating ? 'UPDATING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE',
+      updating ? 'UPDATING' : verifying ? 'VERIFYING' : restarting ? 'OPENING' : recoveringPrivate ? 'RECOVERING' : privateReady ? 'READY' : 'PRIVATE',
       privateReady ? 'PRIVATE' : 'CODEX',
       false,
       !busy,

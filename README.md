@@ -15,6 +15,17 @@ local bridge, Control Room, sessions, and behavior model.
 > affiliated with or endorsed by OpenAI, Work Louder, or Elgato. Codex,
 > Codex Micro, Stream Deck, and related marks belong to their respective owners.
 
+## Download the native macOS app
+
+**[Download the Apple Silicon preview](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.1)** · [Guided setup](https://deck.dionlabs.ai/setup/) · [Install and upgrade notes](docs/native-app.md)
+
+The full Control Center now runs in a native macOS app, with menu-bar status,
+optional task notifications, and automatic connection at login. Node and the
+Elgato plugin installer are included. Requires Apple Silicon, macOS 14+,
+ChatGPT Desktop with Codex, and Elgato Stream Deck 7.1+.
+This alpha preview is **unnotarized**; review the installation notes before opening.
+Existing sessions are never restarted by setup or the launcher.
+
 ## What it does
 
 - Shares up to fifteen Codex sessions with the desktop app while it remains open.
@@ -57,7 +68,7 @@ instructions. The Marketplace edition intentionally does not hide its one SDK
 gap: Elgato's documented plugin API does not expose device-wide brightness, so
 sleep is visually simulated instead of changing hardware brightness.
 
-## Requirements
+## Source installation requirements
 
 - macOS
 - Node.js 22 or newer
@@ -135,11 +146,82 @@ connection—are forwarded, rather than copied into a separately managed server.
 Both clients still control the same sessions. The listener uses a locally stored
 bearer token; it is never exposed beyond `127.0.0.1`.
 
-**Normal Dock/Spotlight launches remain private.** To use Micro after quitting
+**By default, normal Dock/Spotlight launches remain private.** To use Micro after quitting
 Desktop or rebooting, use `shared open` again. With verified setup, the deck's
 explicit **RETRY SHARED** action can also switch a running private Desktop into
 shared control. This interrupts active tasks, so use it only at a safe stopping
-point. Micro never switches or restarts Desktop automatically.
+point. Micro never switches or restarts a running Desktop automatically.
+
+To make shared control the default for future GUI launches and open Codex at login:
+
+```sh
+stream-deck-micro shared autoconnect
+```
+
+For an ordered startup with a native macOS launcher, install from this checkout:
+
+```sh
+npm run launcher:install
+```
+
+This builds **Codex + Stream Deck.app** in `~/Applications`, or updates the copy
+in `/Applications` if you moved it there, and points the login agent at it.
+Use this app instead of ChatGPT directly; you can keep it in the
+Dock. The launcher waits for the installed Marketplace service, verifies changed
+Codex builds, opens ChatGPT through the bridge, and waits for session buttons to
+be ready. It then displays the existing local Control Center in a native WebKit
+window: Slots, Sessions, Keys, Library, Device, diagnostics, and recovery use
+the same service and controls as the browser. Native text dialogs and clipboard
+support preserve editing and copying diagnostics. ChatGPT still owns its session
+backend and per-launch app tools.
+
+Closing the window leaves the app available in the menu bar. Clicking its Dock
+icon or choosing **Show Control Center** reopens it. Quitting the Control Center
+does not quit Codex or the independently managed Stream Deck service. **Reload**
+refreshes only the dashboard; **Open in Browser** opens the same local interface.
+Task notifications are optional, enabled from the app menu, and only report
+observed active-to-finished/error transitions; they do not replay old events.
+At login the app stays in the menu bar unless startup fails.
+
+For dashboard-only access that never launches Codex, use:
+
+```sh
+open -a 'Codex + Stream Deck' --args --control-center
+```
+
+The embedded window accepts only its configured loopback origin. Existing
+Control Center authentication remains in place; unrelated websites cannot use
+the native clipboard bridge. Actual live controls still depend on Codex having
+started in shared mode, exactly as in the browser.
+The installer requires Xcode command-line tools, an installed Marketplace bridge,
+and shared control configured. It does not start, quit, or restart ChatGPT or the
+Stream Deck service. It registers the login entry for the next login.
+
+An already-running ChatGPT is left untouched: the launcher reports either a
+ready connection or that a private session needs a later user-initiated relaunch.
+Startup failures are shown in the launcher window; it never restarts an app to
+repair them. Keep ChatGPT's separate login item disabled so the launcher controls
+startup order. macOS independently restoring ChatGPT can still bypass that order.
+`shared uninstall` disables the launcher login entry; the app bundle remains in
+`~/Applications` and can be removed normally when no longer needed.
+
+This installs a per-user login agent and sets `CODEX_CLI_PATH` and
+`CODEX_APP_SERVER_FORCE_CLI` in the GUI launch environment. It does not restart
+the current app. Future launches use the bridge; updated Desktop builds run
+the compatibility probe automatically before starting shared control. Transient
+transport errors and a build changing during verification get up to three isolated
+attempts with short delays. Failed compatibility assertions are never approved.
+A failed probe or connection still falls back to private mode. A saved transient
+failure before requests were forwarded can be reverified on the next natural
+launch; failures after forwarding remain blocked for explicit recovery.
+Explicit launch environment
+overrides can bypass these defaults, and an app restored before the login agent
+runs may require one later, user-initiated relaunch. The login agent checks for an
+existing Codex process and leaves it alone, including when process inspection
+fails; it never quits or restarts an app to repair routing. This detects but does
+not eliminate the macOS restore ordering race. `shared uninstall` removes the login agent and
+Micro's environment defaults. Other GUI programs can inherit these environment
+variables; the bridge passes unrelated CLI commands through to the bundled binary.
 
 If shared control is unhealthy, the recovery surface offers two deliberately
 different choices. **RETRY SHARED** attempts the verified integration again.
@@ -158,11 +240,12 @@ Recovery may interrupt active turns. It never kills by process name, port alone,
 or an unverified executable, and it re-checks command identity before escalating
 from graceful termination.
 
-The installed Desktop application and server are fingerprinted. If either
-changes, shared launch falls back to Desktop's native private server. The deck
-cannot approve an unverified update: first quit Desktop, run `shared install`
-again to verify the new build, then `shared open`. A version/health response
-alone is not considered compatibility proof.
+The installed Desktop application and server are fingerprinted. With automatic
+connection enabled, changed builds are verified on launch as described above.
+Otherwise an unverified build falls back to Desktop's native private server:
+at a safe stopping point, quit Desktop, run `shared install` again to verify the
+new build, then `shared open`. A version/health response alone is not considered
+compatibility proof.
 
 If shared startup fails before a request is forwarded, the adapter falls back
 to native stdio. Once a request has been forwarded, it is **never replayed**;

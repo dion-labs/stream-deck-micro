@@ -1,6 +1,6 @@
 {
   "name": "stream-deck-micro",
-  "version": "0.1.0",
+  "version": "0.2.0-alpha.1",
   "description": "A local Codex command center for the Elgato Stream Deck MK.2",
   "type": "module",
   "license": "MIT",
@@ -57,7 +57,10 @@
     "marketplace:validate": "npm --prefix marketplace run validate",
     "marketplace:pack": "npm --prefix marketplace run pack",
     "marketplace:media": "node scripts/generate-marketplace-media.mjs",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "launcher:install": "npm run build && node scripts/install-launcher.mjs",
+    "native:test": "node scripts/test-native.mjs",
+    "native:release": "npm run build && node scripts/package-native.mjs"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.7",

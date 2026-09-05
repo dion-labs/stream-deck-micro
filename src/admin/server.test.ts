@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HOSTED_HEALTH_PATH, startAdminServer, type AdminServer } from './server.js';
 
@@ -85,7 +86,7 @@ describe('Control Room server', () => {
     expect(calls).toEqual(['status']);
     expect(body).toMatchObject({
       schemaVersion: 1,
-      bridge: { reachable: true, version: '0.1.0' },
+      bridge: { reachable: true, version: JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version },
       capabilities: {
         mode: 'navigation-only',
         canNavigateSessions: true,
@@ -215,6 +216,9 @@ describe('Control Room server', () => {
     expect(html).toContain('Update shared Codex backend');
     expect(html).toContain('may interrupt active turns');
     expect(html).toContain("recovery === 'updating'");
+    expect(html).toContain("recovery === 'verification-required'");
+    expect(html).toContain("recovery === 'verifying'");
+    expect(html).toContain("verificationNeeded ? 'VERIFY'");
     expect(html).toContain("api('desktop/recover'");
     expect(html).toContain("recovery === 'private-ready'");
     expect(html).toContain("privateReady ? 'READY' : 'PRIVATE'");

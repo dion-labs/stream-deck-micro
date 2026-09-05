@@ -13,7 +13,12 @@ vi.mock('./sharedRuntime.js', async (original) => ({
   readSharedRuntime: () => mocks.runtime,
   desktopBuildFingerprint: async () => mocks.fingerprint,
 }));
-import { assertSharedLaunchCompatible, restartSharedCodexDesktop, sharedDesktopOpenArguments } from './sharedServer.js';
+import {
+  assertSharedLaunchCompatible,
+  restartSharedCodexDesktop,
+  sharedDesktopOpenArguments,
+  sharedLaunchNeedsVerification,
+} from './sharedServer.js';
 
 beforeEach(() => {
   mocks.exec.mockReset();
@@ -30,8 +35,12 @@ describe('shared activation safety boundary', () => {
   });
   it('does not quit or reopen Desktop when either bundled artifact changed', async () => {
     mocks.fingerprint = 'new-build';
+    await expect(sharedLaunchNeedsVerification('ws://127.0.0.1:17532')).resolves.toBe(true);
     await expect(restartSharedCodexDesktop('ws://127.0.0.1:17532')).rejects.toThrow('build changed');
     expect(mocks.exec).not.toHaveBeenCalled();
+  });
+  it('recognizes the exact verified Desktop build', async () => {
+    await expect(sharedLaunchNeedsVerification('ws://127.0.0.1:17532')).resolves.toBe(false);
   });
   it('does not restart Desktop after a failed shared attempt', async () => {
     mocks.runtime = { mode: 'blocked' };

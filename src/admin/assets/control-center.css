@@ -1,0 +1,20 @@
+/* Shared finishing styles for the browser dashboard and native WebKit shell. */
+:root { color-scheme: dark; }
+html { background: #090b08; scrollbar-color: #46513b #0b0d0a; scrollbar-width: thin; }
+* { scrollbar-width: thin; scrollbar-color: #46513b #0b0d0a; }
+::-webkit-scrollbar { width: 8px; height: 8px; background: #0b0d0a; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: #0b0d0a; }
+::-webkit-scrollbar-thumb { background: #46513b; border: 2px solid #0b0d0a; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #718454; }
+
+/* Give the full silhouettes headroom inside the cards while they reach above their frames. */
+.logo, .crew-chip { overflow: visible; }
+.logo img { width: 62px; height: 44px; transform: translate(-10px, -4px); }
+.crew-chip { flex-shrink: 0; isolation: isolate; margin-top: 26px; }
+.crew-chip::after { z-index: -1; }
+.crew-chip img { height: auto; max-width: none; pointer-events: none; }
+.crew-chip.operator img, .crew-chip.curator img { width: 60px; left: 3px; top: auto; bottom: 2px; }
+@media (max-width: 620px) {
+  .crew-chip { margin-top: 22px; }
+  .crew-chip.operator img, .crew-chip.curator img { width: 47px; left: 2px; top: auto; bottom: 2px; }
+}

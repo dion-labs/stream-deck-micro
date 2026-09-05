@@ -13,3 +13,6 @@ JOURNAL.md
 
 # Runtime state.
 .stream-deck-micro/
+
+# Native release artifacts.
+release/
