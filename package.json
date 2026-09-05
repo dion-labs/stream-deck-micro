@@ -1,6 +1,6 @@
 {
   "name": "stream-deck-micro",
-  "version": "0.2.0-alpha.1",
+  "version": "0.2.0-alpha.2",
   "description": "A local Codex command center for the Elgato Stream Deck MK.2",
   "type": "module",
   "license": "MIT",

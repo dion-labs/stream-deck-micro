@@ -35,7 +35,7 @@ try {
 <key>CFBundleName</key><string>Codex + Stream Deck</string>
 <key>CFBundleDisplayName</key><string>Codex + Stream Deck</string>
 <key>CFBundleExecutable</key><string>Launcher</string><key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>${version}</string><key>CFBundleVersion</key><string>20</string>
+<key>CFBundleShortVersionString</key><string>${version}</string><key>CFBundleVersion</key><string>21</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string><key>CFBundleIconFile</key><string>Launcher</string>
 <key>NSHighResolutionCapable</key><true/><key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>`);
