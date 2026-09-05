@@ -424,3 +424,37 @@ describe('DeckController', () => {
     c.close();
   });
 });
+
+describe('navigation-only reconnect key', () => {
+  function setup() {
+    const driver = new FakeDeck(); const deck = new DeckController(driver, workflows, sleepSettings);
+    const reconnect = vi.fn(); const action = vi.fn();
+    deck.on('reconnectCodex', reconnect); deck.on('action', action);
+    deck.setCapabilityMode('navigation-only'); deck.setReconnectAvailable(true);
+    return { driver, deck, reconnect, action };
+  }
+  it('requires a separate confirmation key, with no layout action on either press', () => {
+    const { driver, deck, reconnect, action } = setup();
+    driver.press(14); expect(deck.status().reconnectConfirming).toBe(true); expect(reconnect).not.toHaveBeenCalled();
+    expect([...driver.fills.keys()]).toEqual([6, 8]);
+    driver.press(6); expect(reconnect).toHaveBeenCalledOnce(); expect(action).not.toHaveBeenCalled(); deck.close();
+  });
+  it.each([8, 14, 0])('cancels with key %s without executing its ordinary action', key => {
+    const { driver, deck, reconnect, action } = setup(); driver.press(14); driver.press(key);
+    expect(deck.status().reconnectConfirming).toBe(false); expect(reconnect).not.toHaveBeenCalled(); expect(action).not.toHaveBeenCalled(); deck.close();
+  });
+  it('expires confirmation after eight seconds', () => {
+    vi.useFakeTimers(); const { driver, deck, reconnect } = setup(); driver.press(14); vi.advanceTimersByTime(8000);
+    expect(deck.status().reconnectConfirming).toBe(false); driver.press(6); expect(reconnect).not.toHaveBeenCalled(); deck.close();
+  });
+  it('consumes the first asleep press only to wake', () => {
+    const { driver, deck, reconnect } = setup(); deck.sleep(); driver.press(14);
+    expect(deck.status().mode).toBe('awake'); expect(deck.status().reconnectConfirming).toBe(false); expect(reconnect).not.toHaveBeenCalled(); deck.close();
+  });
+  it('cancels pending confirmation when live control returns and restores the configured layout', () => {
+    const { driver, deck, reconnect } = setup(); const layout = deck.status().layout;
+    driver.press(14); deck.setCapabilityMode('live'); driver.press(6);
+    expect(deck.status().reconnectConfirming).toBe(false); expect(deck.status().reconnectAvailable).toBe(false);
+    expect(deck.status().layout).toEqual(layout); expect(reconnect).not.toHaveBeenCalled(); deck.close();
+  });
+});
