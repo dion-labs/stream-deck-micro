@@ -7,7 +7,7 @@ import { desktopBuildFingerprint, readSharedInstall, SHARED_INSTALL_STATE, type 
 /** Transport/startup failures can be transient; failed compatibility assertions cannot. */
 export function isTransientVerificationFailure(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
-  return /\b(?:ECONNRESET|ECONNREFUSED|EADDRINUSE|ETIMEDOUT|EPIPE)\b|timed?\s*out|No ephemeral listener announced|Desktop changed during compatibility verification/i.test(message);
+  return /\b(?:ECONNRESET|ECONNREFUSED|EADDRINUSE|ETIMEDOUT|EPIPE)\b|timed?\s*out|No ephemeral listener announced|Desktop changed during compatibility verification|^shared server exited during startup$/i.test(message);
 }
 
 interface VerificationOptions {
