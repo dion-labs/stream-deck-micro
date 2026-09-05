@@ -43,6 +43,18 @@ When convenient, finish active work, quit ChatGPT yourself, and open this launch
 Closing the Control Center window, or quitting this launcher, does not stop the
 background bridge or quit ChatGPT. Notifications are off until you enable them.
 
+## Recover after a Codex crash
+
+If the Control Center says Navigation only, use **Reconnect Codex** beside
+Copy diagnostics. Confirm only when active work can pause: recovery first runs
+isolated compatibility verification, then reopens Codex with shared control and
+restores saved buttons. Cancelling leaves Codex untouched. Compatibility failures
+appear in the connection banner without proceeding to a restart.
+
+Restarting only the Control Center cannot replace a private backend already owned
+by a running Codex process. With automatic connection enabled, a subsequent fresh
+Codex launch can reverify a transient shared-startup exit before trying again.
+
 ## Existing installs and upgrades
 
 The preview uses an existing shared Marketplace installation without replacing its

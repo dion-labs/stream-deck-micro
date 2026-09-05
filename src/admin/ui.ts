@@ -455,6 +455,7 @@ ${readFileSync(new URL('./assets/control-center.css', import.meta.url), 'utf8')}
 </div>
 <div class="runtime-strip" id="runtimeStrip">
   <div><strong id="runtimeTitle">Checking capabilities…</strong><div class="health-list" id="runtimeHealth"></div></div>
+  <button class="btn primary" id="reconnectDesktop" hidden>Reconnect Codex</button>
   <button class="btn runtime-copy" id="copyDiagnostics">Copy diagnostics</button>
 </div>
 
@@ -950,6 +951,12 @@ function mkSlotKey(s, i, onclick, attentionState, navigationOnly) {
 }
 
 function renderRuntimeStatus(status) {
+  var reconnect = $('reconnectDesktop');
+  var desktop = status.desktop || {};
+  reconnect.hidden = !desktop.endpoint || Boolean(status.capabilities && status.capabilities.canControlSessions);
+  reconnect.disabled = Boolean(desktop.serverUpdating || desktop.reconnecting);
+  reconnect.textContent = desktop.reconnecting ? 'Reconnecting…' : 'Reconnect Codex';
+  reconnect.title = 'Verify compatibility, then reopen Codex with shared control. Active turns may be interrupted.';
   var capabilities = status.capabilities || { mode:'offline', label:'Offline', reason:'Runtime capabilities unavailable.' };
   var strip = $('runtimeStrip');
   strip.className = 'runtime-strip ' + (capabilities.mode === 'live' ? 'live' : capabilities.mode === 'offline' ? 'offline' : '');
@@ -1009,7 +1016,7 @@ function renderDesktopConnection(status) {
   $('desktopBannerTitle').textContent = title;
   $('desktopBannerMessage').textContent = desktop.restoreError
     ? desktop.restoreError
-    : desktop.message + ' Micro has not attached to your sessions yet.';
+    : desktop.reconnectError || (desktop.message + ' Micro has not attached to your sessions yet.');
 }
 
 /* ---------- device tab ---------- */
@@ -1328,6 +1335,15 @@ function refresh() {
     $('meta').textContent = 'daemon unreachable: ' + e.message;
   });
 }
+
+$('reconnectDesktop').addEventListener('click', function() {
+  if (!confirm('Reconnect Codex? Micro will verify compatibility, then quit and reopen Codex with shared control. Active turns may be interrupted. Continue only when your work can safely pause.')) return;
+  this.disabled = true;
+  api('desktop/reconnect', { confirmRestart: true }).then(function(result) {
+    toast(result.connected ? 'Codex is already connected' : 'Checking compatibility and reconnecting Codex…');
+    return refresh();
+  }).catch(function(error) { toast(error.message, true); $('reconnectDesktop').disabled = false; });
+});
 
 $('copyDiagnostics').addEventListener('click', function() {
   api('diagnostics').then(function(report) {

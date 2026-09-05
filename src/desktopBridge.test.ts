@@ -184,7 +184,7 @@ describe('Desktop-owned shared startup', () => {
 });
 
 describe('automatic verification recovery', () => {
-  it.each(['private', 'blocked', 'reverified'])('only retries a previous transient failure before requests were forwarded (%s)', async (mode) => {
+  it.each(['private', 'startup-exit', 'blocked', 'reverified'])('only retries a previous transient failure before requests were forwarded (%s)', async (mode) => {
     const input = new PassThrough(); const output = new PassThrough();
     const chunks: string[] = []; output.on('data', (chunk) => chunks.push(String(chunk)));
     input.end('{"method":"initialize","id":1}\n');
@@ -193,7 +193,7 @@ describe('automatic verification recovery', () => {
     const result = await runDesktopBridge({
       args, input, output, diagnostics: new PassThrough(), install: { ...install, autoConnect: true, verificationGeneration: mode === 'reverified' ? 'new-verification' : undefined },
       fingerprint: async () => install.fingerprint,
-      priorRuntime: { fingerprint: install.fingerprint, mode: mode === 'reverified' ? 'blocked' : mode, reason: 'ECONNRESET' },
+      priorRuntime: { fingerprint: install.fingerprint, mode: mode === 'reverified' ? 'blocked' : mode === 'startup-exit' ? 'private' : mode, reason: mode === 'startup-exit' ? 'shared server exited during startup' : 'ECONNRESET' },
       automaticVerify: async () => { verifications++; return install.fingerprint; },
       record: (record) => records.push(record), startupTimeoutMs: 100,
       launch: (_binary, _args, _env, shared) => {
@@ -202,7 +202,7 @@ describe('automatic verification recovery', () => {
       },
     });
     expect(result).toBe(0);
-    expect(verifications).toBe(mode === 'private' ? 1 : 0);
+    expect(verifications).toBe(mode === 'private' || mode === 'startup-exit' ? 1 : 0);
     expect(launches).toEqual(mode === 'blocked' ? [false] : [true, false]);
     expect(chunks.join('')).toBe('{"method":"initialize","id":1}\n');
     if (mode === 'blocked') expect(records.at(-1)?.mode).toBe('blocked');

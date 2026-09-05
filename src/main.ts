@@ -1,3 +1,4 @@
+import { reconnectSharedDesktop } from './sharedReconnect.js';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -190,6 +191,7 @@ export async function runDaemon(
   let restoreError: string | null = null;
   let desktopRestartPromise: Promise<void> | null = null;
   let sharedVerifying = false;
+  let reconnectError: string | null = null;
   let sharedVerificationRequired = false;
   let sharedVerificationChecked = false;
   let serverUpdating = false;
@@ -289,6 +291,8 @@ export async function runDaemon(
         serverUpdateError,
         privateRecoveryComplete,
         privateRecoveryError,
+        reconnectError,
+        reconnecting: sharedVerifying || desktopRestartPromise !== null,
       },
     };
   }
@@ -684,20 +688,24 @@ export async function runDaemon(
     return desktopRestartPromise;
   }
 
-  function beginSharedVerification(): Promise<void> {
+  function beginSharedVerification(reconnect = false): Promise<void> {
     if (desktopRestartPromise) return desktopRestartPromise;
-    if (!sharedEndpoint || !sharedVerificationRequired) {
+    if (!sharedEndpoint || (!sharedVerificationRequired && !reconnect)) {
       return Promise.reject(new Error('The installed Codex Desktop build does not require verification'));
     }
     sharedVerifying = true;
+    reconnectError = null;
+    privateRecoveryComplete = false;
+    privateRecoveryError = null;
     desktopRestartPromise = (async () => {
       syncDesktopRecoverySurface();
       log('Codex Desktop compatibility verification requested from the deck');
-      await installSharedServer(sourcePath ?? undefined, sharedEndpoint);
+      if (reconnect) await reconnectSharedDesktop(sourcePath ?? undefined, sharedEndpoint, true);
+      else await installSharedServer(sourcePath ?? undefined, sharedEndpoint);
       sharedVerificationRequired = false;
       sharedVerificationChecked = true;
-      log('Codex Desktop build verified; restarting into shared control');
-      await restartSharedCodexDesktop(sharedEndpoint);
+      log('Codex Desktop build verified; reconnecting shared control');
+      if (!reconnect) await restartSharedCodexDesktop(sharedEndpoint);
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await refreshDesktopConnection();
         if (desktopConnection.state === 'connected' && stateHydrated) {
@@ -709,6 +717,7 @@ export async function runDaemon(
       throw new Error('Verified Codex Desktop reopened but did not join the shared server');
     })().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
+      reconnectError = message;
       log('Codex Desktop compatibility verification failed:', message);
       notify('Micro could not verify Codex', message);
       throw error;
@@ -894,7 +903,7 @@ export async function runDaemon(
 
   async function handleIpc(cmd: string, args: Record<string, unknown>): Promise<unknown> {
     if ((serverUpdating || privateRecoveryPromise)
-      && !['status', 'diagnostics', 'plugin.heartbeat', 'desktop.restart', 'desktop.update', 'desktop.recover', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
+      && !['status', 'diagnostics', 'plugin.heartbeat', 'desktop.restart', 'desktop.reconnect', 'desktop.update', 'desktop.recover', 'deck.key', 'workflows.get', 'deck.settings.get'].includes(cmd)) {
       throw new Error(privateRecoveryPromise
         ? 'Codex is recovering in private mode; wait for the READY key.'
         : 'Codex is updating; wait until your session buttons return.');
@@ -1070,6 +1079,13 @@ export async function runDaemon(
       case 'deck.wake':
         deck.wake();
         return deck.status();
+      case 'desktop.reconnect':
+        if (args.confirmRestart !== true) throw new Error('Confirm reopening Codex before reconnecting. Active work may be interrupted.');
+        if (desktopConnection.state === 'connected' && stateHydrated && !restoreError) return { connected: true };
+        if (privateRecoveryPromise || serverUpdating) throw new Error('Another recovery is already in progress.');
+        if (!sharedEndpoint) throw new Error('Shared control is not configured. Set up the local bridge first.');
+        void beginSharedVerification(true).catch(() => {});
+        return { accepted: true };
       case 'desktop.update':
       case 'desktop.restart':
         void beginDesktopRestart().catch(() => {});
