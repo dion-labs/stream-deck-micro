@@ -246,6 +246,8 @@ export async function runDaemon(
   function syncCapabilitySurface(): ReturnType<typeof runtimeStatus> {
     const runtime = runtimeStatus();
     deck.setCapabilityMode(runtime.capabilities.mode);
+    deck.setReconnectAvailable(Boolean(sharedEndpoint) && runtime.capabilities.mode === 'navigation-only'
+      && !sharedVerifying && !desktopRestartPromise && !privateRecoveryPromise && !serverUpdating);
     return runtime;
   }
 
@@ -395,6 +397,9 @@ export async function runDaemon(
     void beginDesktopRestart().catch(() => {
       // The detailed failure is logged and the recovery key is restored.
     });
+  });
+  deck.on('reconnectCodex', () => {
+    void beginSharedVerification(true).catch(() => {});
   });
   deck.on('recoverCodex', () => {
     void beginPrivateRecovery().catch(() => {

@@ -51,6 +51,13 @@ isolated compatibility verification, then reopens Codex with shared control and
 restores saved buttons. Cancelling leaves Codex untouched. Compatibility failures
 appear in the connection banner without proceeding to a restart.
 
+The physical deck also offers **RECONNECT CODEX** on its bottom-right key in
+navigation-only mode. Press it, then choose **REOPEN CODEX** (middle row, second
+key) or **CANCEL** (middle row, fourth key). The confirmation expires after eight
+seconds; any other key cancels without running its usual action. Reopening can
+interrupt active work. This temporarily replaces the bottom-right key without
+changing your saved layout, which returns when live control is restored.
+
 Restarting only the Control Center cannot replace a private backend already owned
 by a running Codex process. With automatic connection enabled, a subsequent fresh
 Codex launch can reverify a transient shared-startup exit before trying again.

@@ -25,6 +25,7 @@ export interface DeckEvents {
   mode: (mode: DeckMode) => void;
   /** The user explicitly requested a graceful Codex Desktop restart. */
   restartCodex: () => void;
+  reconnectCodex: () => void;
   /** The user explicitly requested removal of shared mode and a private restart. */
   recoverCodex: () => void;
 }
@@ -44,6 +45,8 @@ export interface DeckStatus {
   autoSleepDueAt: number | null;
   desktopRecovery: DesktopRecoveryState | null;
   capabilityMode: CapabilityMode;
+  reconnectAvailable: boolean;
+  reconnectConfirming: boolean;
   actionFeedback: ActionFeedback | null;
 }
 
@@ -91,6 +94,9 @@ export class DeckController {
   private sleepTimer: NodeJS.Timeout | null = null;
   private autoSleepDueAt: number | null = null;
   private desktopRecovery: DesktopRecoveryState | null = null;
+  private reconnectAvailable = false;
+  private reconnectConfirming = false;
+  private reconnectTimer: NodeJS.Timeout | null = null;
   private capabilityMode: CapabilityMode = 'offline';
   private actionFeedback: ActionFeedback | null = null;
   private feedbackTimer: NodeJS.Timeout | null = null;
@@ -167,6 +173,8 @@ export class DeckController {
       autoSleepDueAt: this.autoSleepDueAt,
       desktopRecovery: this.desktopRecovery,
       capabilityMode: this.capabilityMode,
+      reconnectAvailable: this.reconnectAvailable,
+      reconnectConfirming: this.reconnectConfirming,
       actionFeedback: this.actionFeedback ? { ...this.actionFeedback } : null,
     };
   }
@@ -174,7 +182,27 @@ export class DeckController {
   setCapabilityMode(mode: CapabilityMode): void {
     if (mode === this.capabilityMode) return;
     this.capabilityMode = mode;
+    if (mode !== 'navigation-only') { this.reconnectAvailable = false; this.cancelReconnect(); }
     if (this.mode === 'awake' && !this.desktopRecovery) this.repaintAll();
+  }
+
+  setReconnectAvailable(available: boolean): void {
+    if (available === this.reconnectAvailable) return;
+    this.reconnectAvailable = available;
+    this.cancelReconnect();
+    if (this.mode !== 'asleep') this.repaintAll();
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    this.reconnectConfirming = false;
+  }
+
+  private drawReconnect(): void {
+    if (this.reconnectAvailable && !this.desktopRecovery && this.mode === 'awake') {
+      this.device.fillImage(14, renderActionKey('RECONNECT', [180, 108, 20], 'CODEX'), { format: 'rgba' });
+    }
   }
 
   showActionFeedback(action: KeyAction, outcome: ActionFeedback['outcome'], message: string): void {
@@ -202,6 +230,7 @@ export class DeckController {
     if (state === this.desktopRecovery) return;
     const previousMode = this.mode;
     this.desktopRecovery = state;
+    this.cancelReconnect();
     this.clearSleepTimer();
     this.stopPulse();
     this.mode = 'awake';
@@ -315,10 +344,10 @@ export class DeckController {
   }
 
   private drawSlot(snapshot: AgentSlotSnapshot): void {
-    if (this.desktopRecovery) return;
+    if (this.desktopRecovery || this.reconnectConfirming) return;
     const key = [...this.actions()].find(([, action]) =>
       action.kind === 'slot' && action.index === snapshot.index)?.[0];
-    if (key === undefined) return;
+    if (key === undefined || (this.reconnectAvailable && key === 14)) return;
     const buffer = renderSlotKey(
       snapshot,
       snapshot.index === this.selectedIndex,
@@ -331,8 +360,9 @@ export class DeckController {
   }
 
   private drawStaticKeys(): void {
+    if (this.reconnectConfirming) return;
     for (const [key, action] of this.actions()) {
-      if (action.kind === 'slot') continue;
+      if (action.kind === 'slot' || (this.reconnectAvailable && key === 14)) continue;
       if (action.kind === 'workflow') {
         const workflow = this.workflows.find((candidate) => candidate.id === action.id);
         if (!workflow) continue;
@@ -363,11 +393,12 @@ export class DeckController {
         { format: 'rgba' },
       );
     }
+    this.drawReconnect();
   }
 
   /** Pulse animate thinking/running slots; stop the timer when none remain. */
   private ensurePulse(): void {
-    if (this.desktopRecovery) {
+    if (this.desktopRecovery || this.reconnectConfirming) {
       this.stopPulse();
       return;
     }
@@ -397,6 +428,25 @@ export class DeckController {
   }
 
   private onDown(keyIndex: number): void {
+    if (this.reconnectConfirming) {
+      const approved = keyIndex === 6 && this.reconnectAvailable;
+      this.cancelReconnect();
+      this.repaintAll();
+      this.resetAutoSleepTimer();
+      if (approved) this.emitter.emit('reconnectCodex');
+      return;
+    }
+    if (this.reconnectAvailable && !this.desktopRecovery && keyIndex === 14 && this.mode === 'awake') {
+      this.reconnectConfirming = true;
+      this.clearSleepTimer();
+      this.stopPulse();
+      this.repaintAll();
+      this.reconnectTimer = setTimeout(() => {
+        this.cancelReconnect(); this.repaintAll(); this.resetAutoSleepTimer();
+      }, 8000);
+      this.reconnectTimer.unref?.();
+      return;
+    }
     if (this.desktopRecovery) {
       if (keyIndex === SHARED_RETRY_KEY_INDEX && ['restart-required', 'verification-required', 'update-required'].includes(this.desktopRecovery)) {
         this.emitter.emit('restartCodex');
@@ -425,6 +475,11 @@ export class DeckController {
 
   private repaintAll(): void {
     this.device.clearAllKeys();
+    if (this.reconnectConfirming) {
+      this.device.fillImage(6, renderActionKey('REOPEN', [180, 108, 20], 'CODEX'), { format: 'rgba' });
+      this.device.fillImage(8, renderActionKey('CANCEL', [62, 74, 96], 'GO BACK'), { format: 'rgba' });
+      return;
+    }
     if (this.desktopRecovery) {
       const restarting = this.desktopRecovery === 'restarting';
       const updating = this.desktopRecovery === 'updating';
@@ -514,6 +569,7 @@ export class DeckController {
   }
 
   close(): void {
+    this.cancelReconnect();
     this.stopPulse();
     this.clearSleepTimer();
     if (this.feedbackTimer) clearTimeout(this.feedbackTimer);
