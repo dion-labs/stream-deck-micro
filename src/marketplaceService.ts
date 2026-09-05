@@ -40,11 +40,12 @@ export interface MarketplaceServiceStatus {
 
 export async function installMarketplaceService(
   configPath?: string,
+  executableCliPath?: string,
 ): Promise<MarketplaceServiceStatus> {
   // Installing/updating the Elgato bridge must not change Codex's backend.
   const shared = await sharedServerStatus();
   const savedConfigPath = resolve(saveSurfaceMode(configPath ?? shared.configPath ?? undefined, 'marketplace'));
-  const cliPath = resolve(process.argv[1]);
+  const cliPath = resolve(executableCliPath ?? process.argv[1]);
   const state: MarketplaceInstallState = {
     configPath: savedConfigPath,
     nodePath: process.execPath,
@@ -122,6 +123,27 @@ async function waitForBridge(): Promise<void> {
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
   }
   throw new Error(`Marketplace bridge did not become ready; see ${join(APP_DIR, 'marketplace-bridge.error.log')}`);
+}
+
+/** Start an installed bridge without restarting a running service. */
+export async function ensureMarketplaceService(): Promise<void> {
+  try {
+    const status = await ipcCall<{ surface: string }>(IPC_SOCKET, 'status', {}, 1000);
+    if (status.surface === 'marketplace') return;
+    throw new Error('Another Micro surface is running; switch to Marketplace mode before using the launcher');
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Another Micro surface')) throw error;
+  }
+  if (!existsSync(BRIDGE_PLIST)) throw new Error('Install the Marketplace bridge before using the launcher');
+  const domain = launchDomain();
+  try { launchctl(['print', `${domain}/${MARKETPLACE_BRIDGE_LABEL}`]); }
+  catch {
+    try { launchctl(['bootstrap', domain, BRIDGE_PLIST]); }
+    catch { launchctl(['print', `${domain}/${MARKETPLACE_BRIDGE_LABEL}`]); }
+  }
+  // Without -k, kickstart never kills an already running bridge.
+  launchctl(['kickstart', `${domain}/${MARKETPLACE_BRIDGE_LABEL}`]);
+  await waitForBridge();
 }
 
 function launchDomain(): string {

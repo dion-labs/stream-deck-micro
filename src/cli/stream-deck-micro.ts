@@ -8,6 +8,7 @@ usage:
                                                verify the machine and configuration
   stream-deck-micro shared install [config]   verify and prepare scoped shared control (does not restart Codex)
   stream-deck-micro shared open               open Codex with verified shared control (quit it first)
+  stream-deck-micro shared autoconnect        connect on future GUI launches and at login
   stream-deck-micro shared verify             run an isolated compatibility probe; no live configuration changes
   stream-deck-micro shared status             inspect shared-server health and Desktop routing
   stream-deck-micro shared recover [config]   disable shared mode and reopen Codex privately
@@ -44,6 +45,17 @@ async function main(): Promise<void> {
     return;
   }
   if (command === 'shared') {
+    if (args[0] === 'autoconnect') {
+      const { readSharedInstall, SHARED_INSTALL_STATE } = await import('../sharedRuntime.js');
+      const { writeFileSync } = await import('node:fs');
+      const { installDesktopAutoconnect } = await import('../desktopAutoconnect.js');
+      const install = readSharedInstall();
+      if (!install) throw new Error('Run shared install first');
+      installDesktopAutoconnect();
+      writeFileSync(SHARED_INSTALL_STATE, `${JSON.stringify({ ...install, autoConnect: true }, null, 2)}\n`, { mode: 0o600 });
+      process.stdout.write('Automatic shared connection enabled for future GUI launches and login. Running Codex was not restarted.\n');
+      return;
+    }
     const { installSharedServer, sharedServerStatus, uninstallSharedServer, openSharedCodexDesktop, recoverPrivateCodex, DESKTOP_CODEX } = await import(
       '../sharedServer.js'
     );

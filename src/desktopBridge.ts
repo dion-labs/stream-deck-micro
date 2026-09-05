@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import { isTransientVerificationFailure, verifyAutomaticDesktop } from './automaticVerification.js';
 import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 import WebSocket from 'ws';
@@ -37,6 +38,8 @@ export interface DesktopBridgeOptions {
   install?: DesktopSharedInstall | null;
   binary?: string;
   fingerprint?: () => Promise<string>;
+  automaticVerify?: typeof verifyAutomaticDesktop;
+  priorRuntime?: { fingerprint: string; mode: string; reason?: string; verificationGeneration?: string } | null;
   record?: (value: Record<string, unknown>) => void;
   startupTimeoutMs?: number;
   launch?: (binary: string, args: string[], env: NodeJS.ProcessEnv, shared: boolean) => ChildProcess;
@@ -69,6 +72,9 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
   let forwarded = false;
   let shutdownRequested = options.signal?.aborted ?? false;
   let fingerprint = '';
+  let verifiedThisLaunch = false;
+  let verificationGeneration = install?.verificationGeneration;
+  const verificationAbort = new AbortController();
   // Per-launch credentials prevent a second Desktop backend/port collision
   // from accidentally attaching to an older instance of this installation.
   const token = randomBytes(32).toString('hex');
@@ -90,16 +96,16 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
 
   function mark(mode: 'shared' | 'private' | 'blocked', reason?: string): void {
     record({ mode, bridgePid: process.pid, serverPid: child?.pid,
-      url: install?.url ?? '', fingerprint, ...(mode === 'shared' ? { token } : {}), ...(reason ? { reason } : {}) });
+      url: install?.url ?? '', fingerprint, verificationGeneration, ...(mode === 'shared' ? { token } : {}), ...(reason ? { reason } : {}) });
   }
 
-  async function privateServer(reason: string): Promise<number> {
+  async function privateServer(reason: string, blocked = false): Promise<number> {
     if (shutdownRequested) return 0;
     const desktopLaunch = options.args.some((arg) => arg.startsWith('mcp_servers.codex_app='));
     if (desktopLaunch) diagnostics.write(`[micro] Shared control disabled: ${reason}. Using Desktop's private server.\n`);
     child = launch(binary, options.args, env, false);
     // Tool CLI invocations must not overwrite the main Desktop runtime marker.
-    if (desktopLaunch) mark('private', reason);
+    if (desktopLaunch) mark(blocked ? 'blocked' : 'private', reason);
     child.stdout!.pipe(output, { end: false });
     child.stderr!.pipe(diagnostics, { end: false });
     input.pipe(child.stdin!);
@@ -107,7 +113,7 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
     return waitForExit(child);
   }
 
-  const terminate = () => { shutdownRequested = true; void stopChild().catch(() => {}); };
+  const terminate = () => { shutdownRequested = true; verificationAbort.abort(); void stopChild().catch(() => {}); };
   process.once('SIGTERM', terminate);
   process.once('SIGINT', terminate);
   options.signal?.addEventListener('abort', terminate, { once: true });
@@ -116,15 +122,28 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
     if (!install || !sharedArgs) return await privateServer('not installed or unrecognized launch arguments');
     fingerprint = await (options.fingerprint ?? desktopBuildFingerprint)();
     if (shutdownRequested) return 0;
-    if (fingerprint !== install.fingerprint) return await privateServer('Desktop build changed; compatibility verification required');
+    let prior = options.priorRuntime;
+    if (prior === undefined && !options.record) {
+      try { prior = JSON.parse(readFileSync(SHARED_RUNTIME_STATE, 'utf8')); }
+      catch { prior = null; }
+    }
+    const priorMatches = prior?.fingerprint === fingerprint && prior.verificationGeneration === install.verificationGeneration;
+    const retryTransient = install.autoConnect && priorMatches
+      && prior?.mode === 'private' && isTransientVerificationFailure(prior.reason);
+    if (fingerprint !== install.fingerprint || retryTransient) {
+      if (!install.autoConnect) return await privateServer('Desktop build changed; compatibility verification required');
+      diagnostics.write('[micro] Verifying Desktop before connecting automatically.\n');
+      fingerprint = await (options.automaticVerify ?? verifyAutomaticDesktop)(install, {
+        signal: verificationAbort.signal,
+        onRetry: (attempt) => diagnostics.write(`[micro] Transient verification failure; automatic retry ${attempt}/2.\n`),
+      });
+      if (shutdownRequested) return 0;
+      if (!options.automaticVerify) verificationGeneration = readSharedInstall()?.verificationGeneration;
+      verifiedThisLaunch = true;
+    }
     // A known bad launch stays private until an explicit reinstall clears it.
-    if (!options.record) {
-      try {
-        const prior = JSON.parse(readFileSync(SHARED_RUNTIME_STATE, 'utf8'));
-        if (prior.fingerprint === fingerprint && prior.mode !== 'shared') {
-          return await privateServer('previous shared startup failed; run shared install to retry');
-        }
-      } catch { /* First launch. */ }
+    if (!verifiedThisLaunch && priorMatches && prior && prior.mode !== 'shared') {
+      return await privateServer(prior.reason ?? 'previous shared startup failed; run shared install to retry', prior.mode === 'blocked');
     }
     const tokenHash = createHash('sha256').update(token).digest('hex');
     child = launch(binary, [...sharedArgs, '--ws-auth', 'capability-token', '--ws-token-sha256', tokenHash], env, true);

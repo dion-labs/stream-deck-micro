@@ -113,6 +113,7 @@ exec ${quote(DESKTOP_CODEX)} "$@"
     mode: 'desktop-launch', url, codexPath: DESKTOP_CODEX, configPath: savedConfigPath,
     launcherPath: DESKTOP_LAUNCHER, fingerprint, version: verification.version,
     token: randomBytes(32).toString('hex'),
+    ...(readSharedInstall()?.autoConnect ? { autoConnect: true } : {}),
   };
   writePrivateFile(INSTALL_STATE, `${JSON.stringify(state, null, 2)}\n`);
   if (existsSync(SHARED_RUNTIME_STATE)) unlinkSync(SHARED_RUNTIME_STATE);
@@ -120,6 +121,13 @@ exec ${quote(DESKTOP_CODEX)} "$@"
 }
 
 export async function uninstallSharedServer(configPath?: string): Promise<SharedServerStatus> {
+  const { AUTOCONNECT_PLIST } = await import('./desktopAutoconnect.js');
+  bootout(launchDomain(), AUTOCONNECT_PLIST);
+  if (existsSync(AUTOCONNECT_PLIST)) unlinkSync(AUTOCONNECT_PLIST);
+  if (launchctlOutput(['getenv', 'CODEX_CLI_PATH']) === DESKTOP_LAUNCHER) {
+    launchctl(['unsetenv', 'CODEX_CLI_PATH']);
+    launchctl(['unsetenv', 'CODEX_APP_SERVER_FORCE_CLI']);
+  }
   const state = readInstallState();
   const domain = launchDomain();
   bootout(domain, ENV_PLIST);
@@ -450,7 +458,7 @@ const macPrivateRecoveryLifecycle: PrivateCodexRecoveryLifecycle = {
   signal: (pid, signal) => { process.kill(pid, signal); },
 };
 
-function desktopAppIsRunning(): boolean {
+export function desktopAppIsRunning(): boolean {
   try {
     const processes = execFileSync('/bin/ps', ['-ax', '-o', 'pid=,ppid=,command='], {
       encoding: 'utf8',

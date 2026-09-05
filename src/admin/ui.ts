@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 /** Embedded admin panel — one self-contained page served by the daemon. */
 export const ADMIN_HTML: string = `<!doctype html>
 <html lang="en">
@@ -429,6 +431,7 @@ export const ADMIN_HTML: string = `<!doctype html>
     .inspector .title h3 { font-size: 16px; }
     .sessions { max-height: 340px; }
   }
+${readFileSync(new URL('./assets/control-center.css', import.meta.url), 'utf8')}
 </style>
 </head>
 <body>

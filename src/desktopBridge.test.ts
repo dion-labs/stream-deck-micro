@@ -182,3 +182,60 @@ describe('Desktop-owned shared startup', () => {
     expect(records).toEqual([]);
   });
 });
+
+describe('automatic verification recovery', () => {
+  it.each(['private', 'blocked', 'reverified'])('only retries a previous transient failure before requests were forwarded (%s)', async (mode) => {
+    const input = new PassThrough(); const output = new PassThrough();
+    const chunks: string[] = []; output.on('data', (chunk) => chunks.push(String(chunk)));
+    input.end('{"method":"initialize","id":1}\n');
+    const launches: boolean[] = []; const records: Record<string, unknown>[] = [];
+    let verifications = 0;
+    const result = await runDesktopBridge({
+      args, input, output, diagnostics: new PassThrough(), install: { ...install, autoConnect: true, verificationGeneration: mode === 'reverified' ? 'new-verification' : undefined },
+      fingerprint: async () => install.fingerprint,
+      priorRuntime: { fingerprint: install.fingerprint, mode: mode === 'reverified' ? 'blocked' : mode, reason: 'ECONNRESET' },
+      automaticVerify: async () => { verifications++; return install.fingerprint; },
+      record: (record) => records.push(record), startupTimeoutMs: 100,
+      launch: (_binary, _args, _env, shared) => {
+        launches.push(shared);
+        return spawn(process.execPath, ['-e', shared ? 'process.exit(2)' : 'process.stdin.pipe(process.stdout)']);
+      },
+    });
+    expect(result).toBe(0);
+    expect(verifications).toBe(mode === 'private' ? 1 : 0);
+    expect(launches).toEqual(mode === 'blocked' ? [false] : [true, false]);
+    expect(chunks.join('')).toBe('{"method":"initialize","id":1}\n');
+    if (mode === 'blocked') expect(records.at(-1)?.mode).toBe('blocked');
+  });
+
+  it('keeps queued input intact when automatic verification fails', async () => {
+    const input = new PassThrough(); const output = new PassThrough(); const launches: boolean[] = [];
+    const chunks: string[] = []; output.on('data', (chunk) => chunks.push(String(chunk)));
+    input.end('{"method":"initialize","id":1}\n');
+    await runDesktopBridge({
+      args, input, output, diagnostics: new PassThrough(), install: { ...install, autoConnect: true },
+      fingerprint: async () => 'changed', record: () => {},
+      automaticVerify: async () => { throw new Error('Compatibility assertion failed'); },
+      launch: (_binary, _args, _env, shared) => {
+        launches.push(shared); return spawn(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)']);
+      },
+    });
+    expect(launches).toEqual([false]);
+    expect(chunks.join('')).toBe('{"method":"initialize","id":1}\n');
+  });
+
+  it('cancels verification without launching a backend when Desktop closes', async () => {
+    const controller = new AbortController(); let launched = false;
+    const result = await runDesktopBridge({
+      args, input: new PassThrough(), output: new PassThrough(), diagnostics: new PassThrough(),
+      install: { ...install, autoConnect: true }, fingerprint: async () => 'changed',
+      record: () => {}, signal: controller.signal,
+      automaticVerify: async (_install, options) => {
+        controller.abort(); expect(options?.signal?.aborted).toBe(true);
+        throw new Error('cancelled');
+      },
+      launch: () => { launched = true; throw new Error('must not launch'); },
+    });
+    expect(result).toBe(0); expect(launched).toBe(false);
+  });
+});

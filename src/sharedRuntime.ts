@@ -19,6 +19,8 @@ export interface DesktopSharedInstall {
   fingerprint: string;
   version: string;
   token: string;
+  autoConnect?: boolean;
+  verificationGeneration?: string;
 }
 
 export interface DesktopSharedRuntime {
