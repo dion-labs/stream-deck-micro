@@ -63,9 +63,10 @@ export const ADMIN_HTML: string = `<!doctype html>
   .deck { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 6px; }
 
   .key { position: relative; aspect-ratio: 1; border-radius: 12px; cursor: pointer;
-         background: #0c0c12; padding: 4px;
+         background: #0c0c12; padding: 4px; border: 0; color: inherit; font: inherit;
          box-shadow: inset 0 2px 5px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.04);
          transition: transform .08s ease; -webkit-user-select: none; user-select: none; }
+  .key:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
   .key:hover .cap { filter: brightness(1.12); }
   .key:active { transform: translateY(1px) scale(.97); }
   .key.selected .cap { box-shadow: inset 0 0 0 2.5px #fff, 0 0 14px -2px rgba(255,255,255,.25); }
@@ -595,6 +596,34 @@ var selectedKeyIndex = null;
 var layoutDraft = [];
 var layoutDirty = false;
 var draggingKeyIndex = null;
+var heldDeckKey = null;
+var deckRenderDeferred = false;
+var heldDeckContext = null;
+var heldDeckCancelled = false;
+
+function deckKeyContext(key, status) {
+  var layout = status.deck && status.deck.layout || [];
+  var entry = layout.find(function(value) { return String(value.keyIndex) === key.dataset.keyIndex; });
+  var action = entry && entry.action;
+  var target = action && (action.kind === 'slot' || action.kind === 'stop' || action.kind === 'workflow')
+    ? status.slots[action.kind === 'slot' ? action.index : status.selectedIndex] : null;
+  return JSON.stringify([controlMode, status.capabilities && status.capabilities.canControlSessions,
+    status.deck && status.deck.desktopRecovery, action && action.kind, action && action.index,
+    action && action.id, target && target.sessionId,
+    action && action.kind === 'sleep' && status.deck && status.deck.settings.sleepKey]);
+}
+
+function releaseHeldDeckKey(key) {
+  if (heldDeckKey !== key) return;
+  heldDeckKey = null;
+  heldDeckContext = null;
+  heldDeckCancelled = false;
+  if (deckRenderDeferred && lastStatus) {
+    deckRenderDeferred = false;
+    renderDeck(lastStatus);
+  }
+}
+window.addEventListener('blur', function() { if (heldDeckKey) releaseHeldDeckKey(heldDeckKey); });
 
 function esc(s) {
   return String(s).replace(/[&<>"]/g, function(c) {
@@ -626,13 +655,35 @@ function api(cmd, args, method) {
 
 /* ---------- the device ---------- */
 function keyEl(html, cls, onclick, tip) {
-  var k = document.createElement('div');
+  var k = document.createElement('button');
+  k.type = 'button';
+  k.disabled = !onclick;
   k.className = 'key';
-  var cap = document.createElement('div');
+  k.addEventListener('keydown', function(event) {
+    if (event.key === ' ' && heldDeckKey !== k) {
+      heldDeckKey = k;
+      heldDeckContext = lastStatus && deckKeyContext(k, lastStatus);
+      heldDeckCancelled = false;
+    }
+  });
+  k.addEventListener('click', function(event) {
+    if (heldDeckKey === k && heldDeckCancelled) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      toast('Key changed while held. Press it again.', true);
+    }
+  }, true);
+  k.addEventListener('keyup', function(event) {
+    // Native Space activation happens after keyup listeners. Keep the node
+    // through that default click, then render the newest available status.
+    if (event.key === ' ') setTimeout(function() { releaseHeldDeckKey(k); }, 0);
+  });
+  k.addEventListener('blur', function() { releaseHeldDeckKey(k); });
+  var cap = document.createElement('span');
   cap.className = 'cap ' + (cls || '');
   cap.innerHTML = html;
   k.appendChild(cap);
-  if (tip) k.title = tip;
+  if (tip) { k.title = tip; k.setAttribute('aria-label', tip); }
   if (onclick) k.addEventListener('click', function() {
     k.classList.add('pressed');
     setTimeout(function() { k.classList.remove('pressed'); }, 120);
@@ -659,7 +710,18 @@ function twoLines(label) {
 }
 
 function renderDeck(status) {
+  if (heldDeckKey && heldDeckKey.isConnected) {
+    if (deckKeyContext(heldDeckKey, status) !== heldDeckContext) heldDeckCancelled = true;
+    deckRenderDeferred = true;
+    return;
+  }
   var deck = $('deck');
+  var focusedKey = deck.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
+  function restoreKeyFocus() {
+    if (!focusedKey) return;
+    var key = Array.from(deck.children).find(function(child) { return child.dataset.focusKey === focusedKey; });
+    if (key && !key.disabled) key.focus({ preventScroll: true });
+  }
   deck.innerHTML = '';
   var visualMode = controlMode === 'configure' ? 'awake' : ((status.deck && status.deck.mode) || 'awake');
   deck.className = 'deck mode-' + visualMode + (controlMode === 'configure' ? ' configuring' : ' live-control');
@@ -699,7 +761,9 @@ function renderDeck(status) {
       );
       deck.appendChild(recoveryVisual.root);
     }
+    Array.from(deck.children).forEach(function(key, index) { key.dataset.focusKey = 'recovery-' + index; });
     renderKeyInspector();
+    restoreKeyFocus();
     return;
   }
   var slots = status.slots;
@@ -727,6 +791,7 @@ function renderDeck(status) {
     deck.appendChild(visual.root);
   }
   renderKeyInspector();
+  restoreKeyFocus();
 }
 
 function renderActionVisual(action, slots, attention, wfById, status) {
@@ -756,6 +821,8 @@ function renderActionVisual(action, slots, attention, wfById, status) {
 
 function wireDeckKey(root, keyIndex, action, status) {
   root.dataset.keyIndex = keyIndex;
+  root.dataset.focusKey = 'layout-' + keyIndex;
+  root.disabled = false;
   if (controlMode === 'configure') root.classList.toggle('selected', selectedKeyIndex === keyIndex);
   root.draggable = controlMode === 'configure';
   root.addEventListener('click', function() {

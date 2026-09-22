@@ -174,12 +174,7 @@ export function saveWorkflows(
   workflowsLibrary: Config['workflowsLibrary'],
 ): string {
   const path = sourcePath ?? 'config.json';
-  let raw: Record<string, unknown> = {};
-  try {
-    raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-  } catch {
-    // missing or unreadable file → start from the other defaults
-  }
+  const raw = readConfigForUpdate(path);
   raw.workflows = workflows;
   raw.workflowsLibrary = workflowsLibrary;
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
@@ -193,12 +188,7 @@ export function saveDeckSettings(
   settings: DeckSettings,
 ): string {
   const path = sourcePath ?? 'config.json';
-  let raw: Record<string, unknown> = {};
-  try {
-    raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-  } catch {
-    // missing or unreadable file → start from defaults
-  }
+  const raw = readConfigForUpdate(path);
   raw.deck = settings;
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
@@ -211,12 +201,7 @@ export function saveDeckLayout(
   layout: DeckLayoutEntry[],
 ): string {
   const path = sourcePath ?? 'config.json';
-  let raw: Record<string, unknown> = {};
-  try {
-    raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-  } catch {
-    // missing or unreadable file → start from defaults
-  }
+  const raw = readConfigForUpdate(path);
   raw.layout = layout;
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
   chmodSync(path, 0o600);
@@ -228,14 +213,7 @@ export function saveAppServerUrl(explicitPath: string | undefined, url: string |
   const path = explicitPath
     ?? (existsSync('config.json') ? 'config.json' : join(APP_DIR, 'config.json'));
   if (!url && !existsSync(path)) return path;
-  let raw: Record<string, unknown> = {};
-  if (existsSync(path)) {
-    try {
-      raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-    } catch (error) {
-      throw new Error(`cannot update invalid config at ${path}: ${String(error)}`);
-    }
-  }
+  const raw = readConfigForUpdate(path);
   if (url) {
     raw.harness = 'codex-app-server';
     raw.appServer = { ...(isRecord(raw.appServer) ? raw.appServer : {}), url };
@@ -258,14 +236,7 @@ export function saveSurfaceMode(
 ): string {
   const path = explicitPath
     ?? (existsSync('config.json') ? 'config.json' : join(APP_DIR, 'config.json'));
-  let raw: Record<string, unknown> = {};
-  if (existsSync(path)) {
-    try {
-      raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
-    } catch (error) {
-      throw new Error(`cannot update invalid config at ${path}: ${String(error)}`);
-    }
-  }
+  const raw = readConfigForUpdate(path);
   raw.surface = { ...(isRecord(raw.surface) ? raw.surface : {}), mode };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
@@ -275,4 +246,23 @@ export function saveSurfaceMode(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Missing files may be created; existing unreadable/invalid data must survive. */
+function readConfigForUpdate(path: string): Record<string, unknown> {
+  let text: string;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {};
+    throw new Error(`cannot read config at ${path}: ${String(error)}`);
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`cannot update invalid config at ${path}: ${String(error)}`);
+  }
+  if (!isRecord(raw)) throw new Error(`config at ${path} must be a JSON object`);
+  return raw;
 }

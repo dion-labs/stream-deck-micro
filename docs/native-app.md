@@ -1,6 +1,6 @@
 # Native macOS preview
 
-[Download v0.2.0-alpha.3](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.3)
+[Download v0.2.0-alpha.4](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.4)
 
 Codex + Stream Deck brings the full local Control Center into a macOS window:
 Slots, Sessions, Keys, Library, Device, menu-bar status, and opt-in task notifications.
@@ -111,3 +111,16 @@ production dependencies, the app and Node licenses, and an ad-hoc signature.
 The release builder does not replace the installed app, restart services, or open ChatGPT.
 `node scripts/native-demo.mjs` serves the real Control Center with synthetic demo
 content on port 17539 for public product visuals; it cannot control real sessions.
+
+
+## Optional isolated browser regression
+
+After `npm run build`, `node scripts/test-control-room.mjs` uses Playwright and an
+installed Chrome to test synthetic loopback data with a fresh browser profile.
+If Playwright is installed outside this checkout, set `SDM_PLAYWRIGHT_MODULE` to
+its absolute `index.mjs` path. Set `SDM_BROWSER_EVIDENCE_DIR` to save desktop and
+narrow screenshots. The harness closes only its own browser and fixture server. Supplying the same
+`SDM_PLAYWRIGHT_MODULE` when running `scripts/verify-native-artifact.py` also runs
+the browser checks against the extracted ZIP with its bundled Node executable.
+It does not connect to the real bridge, Codex, or hardware. Real Safari permission,
+VoiceOver, native-window and physical-deck acceptance remain separate checks.
