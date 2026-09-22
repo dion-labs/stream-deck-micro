@@ -30,6 +30,13 @@ usage:
   sdm diagnostics            print a redacted runtime diagnostic report
 `;
 
+function slotIndex(value: string | undefined): number {
+  if (value === undefined || !/^\d+$/.test(value)) throw new Error('slot must be an integer from 1 to 15');
+  const slot = Number(value);
+  if (!Number.isInteger(slot) || slot < 1 || slot > 15) throw new Error('slot must be an integer from 1 to 15');
+  return slot - 1;
+}
+
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
   try {
@@ -47,7 +54,7 @@ async function main(): Promise<void> {
           };
         }>(IPC_SOCKET, 'status');
         console.log(`capability: ${status.capabilities.label} — ${status.capabilities.reason}`);
-        console.log(`selected: ${status.selectedIndex}`);
+        console.log(`selected: ${status.selectedIndex + 1}`);
         for (const s of status.slots) {
           const marker = s.index === status.selectedIndex ? '>' : ' ';
           const id = s.sessionId ? s.sessionId.slice(0, 8) : '--------';
@@ -79,7 +86,7 @@ async function main(): Promise<void> {
       }
       case 'select': {
         const { selectedIndex } = await ipcCall<{ selectedIndex: number }>(IPC_SOCKET, 'select', {
-          index: Number(rest[0]) - 1,
+          index: slotIndex(rest[0]),
         });
         console.log(`selected slot ${selectedIndex + 1}.`);
         return;
@@ -98,7 +105,7 @@ async function main(): Promise<void> {
         return;
       case 'clear': {
         const { cleared } = await ipcCall<{ cleared: number }>(IPC_SOCKET, 'clear', {
-          index: rest[0] === undefined ? undefined : Number(rest[0]) - 1,
+          index: rest[0] === undefined ? undefined : slotIndex(rest[0]),
         });
         console.log(`cleared slot ${cleared + 1}.`);
         return;
@@ -115,7 +122,7 @@ async function main(): Promise<void> {
       case 'rename': {
         if (rest.length < 2) throw new Error('usage: sdm rename <1-15> <label | ->');
         const label = rest.slice(1).join(' ') === '-' ? null : rest.slice(1).join(' ');
-        await ipcCall(IPC_SOCKET, 'rename', { index: Number(rest[0]) - 1, label });
+        await ipcCall(IPC_SOCKET, 'rename', { index: slotIndex(rest[0]), label });
         console.log(label ? `renamed to "${label}".` : 'custom label cleared.');
         return;
       }
