@@ -1,6 +1,6 @@
 # Native macOS preview
 
-[Download v0.2.0-alpha.5](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.5)
+[Download v0.2.0-alpha.6](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.6)
 
 Codex + Stream Deck brings the full local Control Center into a macOS window:
 Slots, Sessions, Keys, Library, Device, menu-bar status, and opt-in task notifications.

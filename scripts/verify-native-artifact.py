@@ -19,10 +19,11 @@ with tempfile.TemporaryDirectory(prefix='sdm-artifact-') as scratch:
  assert json.loads((runtime/'package.json').read_text())['version']==version
  assert (bundle/'Contents/Resources/Micro.streamDeckPlugin').stat().st_size>1000
  smoke=Path(scratch)/'smoke.mjs'
- smoke.write_text('''
+ smoke.write_text(r'''
 import assert from 'node:assert/strict';
 import fs, { readFileSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
+import { connect, createServer as createNetServer } from 'node:net';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const runtime = process.argv[2];
@@ -64,6 +65,44 @@ try {
  fs.writeFileSync = realWrite;
  syncBuiltinESMExports();
 }
+const {serveIpc, ipcCall} = await import(pathToFileURL(runtime + '/dist/ipc.js'));
+const ipcPath = join(process.env.TMPDIR, 'i.sock');
+await serveIpc(ipcPath, (_cmd, args) => args);
+const unicode = 'caffè 👩‍💻 漢字';
+const request = Buffer.from(JSON.stringify({id:1,cmd:'echo',args:{text:unicode}}) + '\n');
+const requestSplit = request.indexOf(Buffer.from('è')) + 1;
+const echoed = await new Promise((resolve, reject) => {
+ const socket = connect(ipcPath);
+ socket.setEncoding('utf8');
+ const deadline = setTimeout(() => { socket.destroy(); reject(new Error('fixture IPC deadline')); }, 1000);
+ let result = '';
+ socket.on('error', reject);
+ socket.on('close', () => clearTimeout(deadline));
+ socket.on('connect', () => {
+   socket.write(request.subarray(0, requestSplit));
+   setTimeout(() => socket.write(request.subarray(requestSplit)), 20);
+ });
+ socket.on('data', part => {
+   result += part;
+   if (result.includes('\n')) { resolve(JSON.parse(result.split('\n')[0])); socket.destroy(); }
+ });
+});
+assert.deepEqual(echoed.data, {text:unicode});
+const peerPath = join(process.env.TMPDIR, 'p.sock');
+let peerCalls = 0;
+const peer = createNetServer(socket => socket.once('data', () => {
+ if (++peerCalls > 1) { socket.end(); return; }
+ const response = Buffer.from(JSON.stringify({ok:true,data:{text:unicode}}) + '\n');
+ const split = response.indexOf(Buffer.from('è')) + 1;
+ socket.write(response.subarray(0,split));
+ setTimeout(() => socket.end(response.subarray(split)), 20);
+}));
+await new Promise((resolve,reject) => { peer.once('error',reject); peer.listen(peerPath,resolve); });
+try {
+ assert.deepEqual(await ipcCall(peerPath,'fixture',{},1000), {text:unicode});
+ await assert.rejects(ipcCall(peerPath,'fixture',{},1000), /disconnected/);
+} finally { await new Promise(resolve => peer.close(resolve)); }
+console.log('Extracted bundled runtime: fragmented UTF-8 in both directions and early EOF passed');
 const {startAdminServer, HOSTED_HEALTH_PATH} = await import(pathToFileURL(runtime + '/dist/admin/server.js'));
 let calls = 0;
 const server = await startAdminServer(0, async () => { calls++; throw new Error('PRIVATE_FIXTURE'); });

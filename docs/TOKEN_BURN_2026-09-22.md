@@ -148,3 +148,17 @@ Alpha.5 ZIP SHA256 `9ec3d7988f1f7bc85b31d722cbce8d36fbd9fa6c3a47b3450b8a7250d884
 ### Ready recap at this checkpoint
 
 38 initial flow/platform cases plus SDM-039 atomic-failure coverage are recorded. Completed milestones: HTTP method/body/privacy hardening; malformed IPC recovery; invalid-config preservation; native keyboard/focus/held-key controls; atomic write-failure preservation; reusable extracted-artifact and isolated browser QA. Unit coverage grew from235 to353; Marketplace13 and native policy pass, opt-in bundled integration6 pass. Alpha.3 and alpha.4 are published/merged with coordinated site-local links; alpha.5 candidate validated. Exact physical/native/login/permission/clipboard gates above remain unrun; no live restart/install/hardware, production backend or website deployment occurred. Concurrent read-modify-write remains an acknowledged separate risk.
+
+### Alpha.5 release receipt and transport milestone
+
+Alpha.5 published at https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.5 ; PR20 merged green at `627df51541e08ea13ae88994abb429b5e38f963a`, source bd8d5ea. Uploaded ZIP API digest matches `9ec3d7988f1f7bc85b31d722cbce8d36fbd9fa6c3a47b3450b8a7250d884da21`; both assets uploaded. Deck-site independently checked release/checksum/size, updated only local links and passed affected three-engine link/layout checks; no deploy/push.
+
+New `codex/ipc-transport-recovery` from627df51: **SDM-040 (P1 happy/platform)** fragmented valid UTF-8 must preserve exact accent/emoji/CJK text in requests and responses; **SDM-041 (P1 error/recovery)** early/truncated EOF rejects immediately, silent peers time out and subsequent calls recover, invalid cyclic arguments reject without transmission. `src/ipc.test.ts` + `src/ipc.client.test.ts`: first17 tests reproduced4 failures (both Unicode directions and two EOF cases); final22 pass with 2/3/4-byte boundaries and cyclic argument coverage. Logs `/tmp/dionlabs-burn-deck-transport-{before,after}.log`.
+
+Both socket ends now use streaming UTF-8 decoding; client completion has one settled cleanup path that clears its timer, destroys its socket and rejects unexpected close. No command replay or retry was added. Artifact verifier extended to reproduce fragmented traffic/EOF using the actual extracted runtime and owned fixture sockets. Root alpha.6 release slot/review requested; no production socket accessed.
+
+### Alpha.6 final candidate receipt
+
+Root reserved alpha.6 and independently passed22 focused transport tests plus actual one-byte-at-a-time Unicode response traffic. Source ipc.ts SHA256 `36ae801addae75fece80e5b34c2b19d8bfe85738ef6c55de36569ecbdfb9b9b1` matches reviewed candidate. Full check:30 files,364 passed /4 default opt-in skipped, with the unchanged optional integration covered earlier in this burn. Native alpha.6/build25 built under resource lock; extracted exact version/build, strict signature, plugin and checksum passed. Actual bundled-runtime fragmented UTF-8 requests/responses and early EOF passed alongside existing malformed-config/partial-write/HTTP/privacy and full browser regressions. Logs `/tmp/dionlabs-burn-deck-alpha6-{check,release,artifact}.log`.
+
+Final ZIP SHA256 `8399746c0d2c8ec79f487432af204247c0e4e1e9fe9e4fe2da1f267c20c4de2a`. Ready for PR/CI/release/site handoff; no live app/session/hardware or user data touched. Future CLI argument review identified an untested coercion risk (NaN serializes as null, daemon Number(null) becomes0), to investigate separately without changing this frozen transport artifact.
