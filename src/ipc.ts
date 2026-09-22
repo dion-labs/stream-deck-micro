@@ -12,9 +12,10 @@ export function serveIpc(socketPath: string, handler: IpcHandler): Promise<void>
   mkdirSync(dirname(socketPath), { recursive: true, mode: 0o700 });
   return new Promise((resolve, reject) => {
     const server = createServer((conn) => {
+      conn.setEncoding('utf8');
       let buffer = '';
       conn.on('data', (chunk) => {
-        buffer += chunk.toString('utf8');
+        buffer += chunk;
         let newline: number;
         while ((newline = buffer.indexOf('\n')) !== -1) {
           const line = buffer.slice(0, newline);
@@ -82,16 +83,32 @@ export async function ipcCall<T = unknown>(
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const socket = connect(socketPath);
-    socket.on('error', (e) =>
-      reject(new Error(`cannot reach daemon at ${socketPath}: ${String(e)}`)),
+    socket.setEncoding('utf8');
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function finish(error?: Error, data?: T): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (error) reject(error);
+      else resolve(data as T);
+    }
+    socket.on('error', (error) =>
+      finish(new Error(`cannot reach daemon at ${socketPath}: ${String(error)}`)),
     );
+    socket.on('close', () => finish(new Error(`daemon disconnected before replying to '${cmd}'`)));
     const id = Date.now();
     let buffer = '';
     socket.on('connect', () => {
-      socket.write(`${JSON.stringify({ id, cmd, args })}\n`);
+      try {
+        socket.write(`${JSON.stringify({ id, cmd, args })}\n`);
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
     });
-    socket.on('data', (chunk) => {
-      buffer += chunk.toString('utf8');
+    socket.on('data', (chunk: string) => {
+      buffer += chunk;
       const newline = buffer.indexOf('\n');
       if (newline === -1) return;
       try {
@@ -101,17 +118,15 @@ export async function ipcCall<T = unknown>(
           data?: T;
           error?: string;
         };
-        if (response.ok) resolve(response.data as T);
-        else reject(new Error(response.error ?? 'daemon error'));
-      } catch (e) {
-        reject(e instanceof Error ? e : new Error(String(e)));
-      } finally {
-        socket.destroy();
+        if (response.ok) finish(undefined, response.data);
+        else finish(new Error(response.error ?? 'daemon error'));
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
       }
     });
-    setTimeout(() => {
-      socket.destroy();
-      reject(new Error(`ipc call '${cmd}' timed out after ${timeoutMs}ms`));
-    }, timeoutMs).unref?.();
+    timer = setTimeout(() => {
+      finish(new Error(`ipc call '${cmd}' timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    timer.unref?.();
   });
 }
