@@ -15,6 +15,7 @@ import {
   WorkflowSchema,
   type SurfaceMode,
 } from './config.js';
+import { validateCommandIndices } from './core/commandIndices.js';
 import { SlotManager } from './core/slotManager.js';
 import { DetachedSession } from './core/detachedSession.js';
 import type { AgentSession, AgentSlotSnapshot } from './core/types.js';
@@ -913,6 +914,7 @@ export async function runDaemon(
         ? 'Codex is recovering in private mode; wait for the READY key.'
         : 'Codex is updating; wait until your session buttons return.');
     }
+    validateCommandIndices(cmd, args, config.slots.count, virtualDeck?.NUM_KEYS ?? 15);
     switch (cmd) {
       case 'status':
         return daemonStatus();

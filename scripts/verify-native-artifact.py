@@ -9,7 +9,7 @@ expected_build=build_match.group(1)
 archive=root/f'release/Codex-Stream-Deck-{version}-macOS-arm64.zip'
 expected=(root/'release/SHA256SUMS').read_text().split()[0]
 assert hashlib.sha256(archive.read_bytes()).hexdigest()==expected
-with tempfile.TemporaryDirectory(prefix='sdm-artifact-') as scratch:
+with tempfile.TemporaryDirectory(prefix='sdm-artifact-', dir='/tmp') as scratch:
  subprocess.run(['/usr/bin/ditto','-x','-k',str(archive),scratch],check=True)
  bundle=Path(scratch)/'Codex + Stream Deck.app'
  subprocess.run(['/usr/bin/codesign','--verify','--deep','--strict',str(bundle)],check=True)
@@ -24,6 +24,7 @@ import assert from 'node:assert/strict';
 import fs, { readFileSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { connect, createServer as createNetServer } from 'node:net';
+import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 const runtime = process.argv[2];
@@ -103,6 +104,41 @@ try {
  await assert.rejects(ipcCall(peerPath,'fixture',{},1000), /disconnected/);
 } finally { await new Promise(resolve => peer.close(resolve)); }
 console.log('Extracted bundled runtime: fragmented UTF-8 in both directions and early EOF passed');
+const {validateCommandIndices} = await import(pathToFileURL(runtime + '/dist/core/commandIndices.js'));
+for (const [cmd, field] of [['select','index'],['clear','index'],['rename','index'],['attach','slotIndex'],['slots.swap','firstIndex'],['slots.swap','secondIndex'],['desktop.open','index'],['deck.key','index']]) {
+ assert.throws(() => validateCommandIndices(cmd,{firstIndex:0,secondIndex:1,[field]:null},15), /must be an integer/);
+}
+assert.equal(config.APP_DIR, join(process.env.TMPDIR, '.stream-deck-micro'));
+const cliRequests = [];
+await serveIpc(config.IPC_SOCKET, (cmd, args) => {
+ cliRequests.push({cmd,args});
+ return {selectedIndex:args.index,cleared:args.index,renamed:args.index};
+});
+async function cli(args) {
+ return new Promise((resolve,reject) => {
+  const child = spawn(process.execPath,[join(runtime,'dist/cli/sdm.js'),...args],{
+   env:{PATH:'/usr/bin:/bin',HOME:process.env.TMPDIR,TMPDIR:process.env.TMPDIR},stdio:['ignore','pipe','pipe']
+  });
+  let stdout='',stderr='';
+  const deadline=setTimeout(() => {child.kill('SIGKILL');reject(new Error('fixture CLI deadline'));},3000);
+  child.stdout.on('data',part => {stdout+=part;});
+  child.stderr.on('data',part => {stderr+=part;});
+  child.on('error',error => {clearTimeout(deadline);reject(error);});
+  child.on('close',code => {clearTimeout(deadline);resolve({code,stdout,stderr});});
+ });
+}
+for (const cmd of ['select','clear','rename']) {
+ const result=await cli([cmd,'bad',...(cmd==='rename'?['Fixture']:[])]);
+ assert.equal(result.code,1);
+ assert.match(result.stderr,/slot must be/);
+}
+assert.equal(cliRequests.length,0);
+const selected=await cli(['select','15']);
+assert.equal(selected.code,0);
+assert.match(selected.stdout,/selected slot 15/);
+assert.deepEqual(cliRequests,[{cmd:'select',args:{index:14}}]);
+console.log('Extracted bundled CLI: invalid slots never dispatched; slot 15 maps to index 14; shared null guards passed');
+
 const {startAdminServer, HOSTED_HEALTH_PATH} = await import(pathToFileURL(runtime + '/dist/admin/server.js'));
 let calls = 0;
 const server = await startAdminServer(0, async () => { calls++; throw new Error('PRIVATE_FIXTURE'); });
