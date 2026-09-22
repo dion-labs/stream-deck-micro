@@ -1,6 +1,6 @@
 # Native macOS preview
 
-[Download v0.2.0-alpha.2](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.2)
+[Download v0.2.0-alpha.3](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.3)
 
 Codex + Stream Deck brings the full local Control Center into a macOS window:
 Slots, Sessions, Keys, Library, Device, menu-bar status, and opt-in task notifications.
@@ -103,6 +103,7 @@ npm run marketplace:pack
 npm run check
 npm run native:test
 npm run native:release
+python3 scripts/verify-native-artifact.py
 ```
 
 The build creates a ZIP and `SHA256SUMS` in `release/`, with relative bundle paths,

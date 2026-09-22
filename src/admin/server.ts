@@ -138,6 +138,10 @@ async function route(
       sendJson(res, 401, { error: 'invalid control-room token' });
       return;
     }
+    if (!['GET', 'POST', 'PUT'].includes(req.method ?? '')) {
+      sendJson(res, 405, { error: 'method not allowed' });
+      return;
+    }
     const cmd = apiMatch[1];
     const allowedGet = ['status', 'diagnostics', 'sessions', 'workflows.get', 'deck.settings.get'];
     if (req.method === 'GET' && !allowedGet.includes(cmd)) {
@@ -150,7 +154,12 @@ async function route(
         sendJson(res, 415, { error: 'application/json required' });
         return;
       }
-      args = (await readBody(req)) as Record<string, unknown>;
+      const body = await readBody(req);
+      if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'JSON object required' });
+        return;
+      }
+      args = body as Record<string, unknown>;
     }
     const data = await handle(cmd.replace(/\//g, '.'), args);
     sendJson(res, 200, data ?? {});
@@ -191,8 +200,13 @@ async function serveHostedHealth(
     return;
   }
 
-  const status = await handle('status', {});
-  sendJson(res, 200, hostedHealth(status));
+  try {
+    const status = await handle('status', {});
+    sendJson(res, 200, hostedHealth(status));
+  } catch {
+    // This unpaired cross-origin surface must never expose handler diagnostics.
+    sendJson(res, 503, { error: 'Bridge health is temporarily unavailable.' });
+  }
 }
 
 function hostedHealth(value: unknown): Record<string, unknown> {
