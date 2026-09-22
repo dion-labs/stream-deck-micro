@@ -46,10 +46,18 @@ async function handleLine(
     conn.write(`${JSON.stringify({ id: null, ok: false, error: 'malformed JSON' })}\n`);
     return;
   }
+  if (typeof request !== 'object' || request === null || Array.isArray(request)) {
+    conn.write(`${JSON.stringify({ id: null, ok: false, error: 'request object required' })}\n`);
+    return;
+  }
   if (typeof request.cmd !== 'string') {
     conn.write(
       `${JSON.stringify({ id: request.id ?? null, ok: false, error: 'missing cmd' })}\n`,
     );
+    return;
+  }
+  if (request.args !== undefined && (typeof request.args !== 'object' || request.args === null || Array.isArray(request.args))) {
+    conn.write(`${JSON.stringify({ id: request.id ?? null, ok: false, error: 'args object required' })}\n`);
     return;
   }
   try {

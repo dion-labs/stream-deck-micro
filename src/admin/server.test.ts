@@ -1,3 +1,4 @@
+import { request } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { HOSTED_HEALTH_PATH, startAdminServer, type AdminServer } from './server.js';
@@ -269,4 +270,95 @@ describe('Control Room server', () => {
       args: { id: 'session-new', slotIndex: 3 },
     }]);
   });
+
+  async function authenticatedHeaders() {
+    const html = await (await fetch(server!.url)).text();
+    const token = html.match(/meta name="sdm-api-token" content="([^"]+)"/)?.[1];
+    expect(token).toBeTruthy();
+    return { 'x-stream-deck-micro-token': token!, 'content-type': 'application/json' };
+  }
+
+  it.each(['HEAD', 'DELETE', 'PATCH', 'OPTIONS'])('rejects %s without executing a control command', async (method) => {
+    const calls: string[] = [];
+    server = await startAdminServer(0, async cmd => { calls.push(cmd); return {}; });
+    const response = await fetch(`${server.url}/api/stop`, { method, headers: await authenticatedHeaders() });
+    expect(response.status).toBe(405);
+    expect(calls).toEqual([]);
+  });
+
+  it.each(['null', '[]', '"prompt"', '42', 'true', '{'])('rejects invalid command arguments %s and remains usable', async body => {
+    const calls: string[] = [];
+    server = await startAdminServer(0, async cmd => { calls.push(cmd); return {}; });
+    const headers = await authenticatedHeaders();
+    const rejected = await fetch(`${server.url}/api/stop`, { method: 'POST', headers, body });
+    expect(rejected.status).toBe(400);
+    expect(calls).toEqual([]);
+    const recovered = await fetch(`${server.url}/api/stop`, { method: 'POST', headers, body: '{}' });
+    expect(recovered.status).toBe(200);
+    expect(calls).toEqual(['stop']);
+  });
+
+  it('does not expose private handler failures through hosted health', async () => {
+    server = await startAdminServer(0, async () => { throw new Error('SECRET prompt at /private/fixture'); });
+    const response = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, {
+      headers: { origin: 'https://deck.dionlabs.ai' },
+    });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'Bridge health is temporarily unavailable.' });
+  });
+
+  it('rejects a token from an earlier server instance', async () => {
+    server = await startAdminServer(0, async () => ({}));
+    const stale = await authenticatedHeaders();
+    await server.close();
+    let called = false;
+    server = await startAdminServer(0, async () => { called = true; return {}; });
+    expect((await fetch(`${server.url}/api/status`, { headers: stale })).status).toBe(401);
+    expect(called).toBe(false);
+    expect((await fetch(`${server.url}/api/status`, { headers: await authenticatedHeaders() })).status).toBe(200);
+    expect(called).toBe(true);
+  });
+
+
+  it.each(['https://deck.dionlabs.ai.evil.example', 'null', 'http://deck.dionlabs.ai'])('rejects hosted lookalike origin %s', async origin => {
+    let calls = 0;
+    server = await startAdminServer(0, async () => { calls++; return {}; });
+    const response = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, { headers: { origin } });
+    expect(response.status).toBe(403);
+    expect(response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(calls).toBe(0);
+  });
+
+  it('rejects foreign Host and wrong media type before dispatch', async () => {
+    let calls = 0;
+    server = await startAdminServer(0, async () => { calls++; return {}; });
+    const headers = await authenticatedHeaders();
+    const foreignHostStatus = await new Promise<number | undefined>((resolve, reject) => {
+      const req = request(`${server!.url}/api/status`, { headers: { ...headers, host: 'evil.example' } }, response => {
+        response.resume();
+        response.on('end', () => resolve(response.statusCode));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+    expect(foreignHostStatus).toBe(403);
+    expect((await fetch(`${server.url}/api/stop`, {
+      method: 'POST', headers: { ...headers, 'content-type': 'text/plain' }, body: '{}',
+    })).status).toBe(415);
+    expect(calls).toBe(0);
+  });
+
+  it('fails closed on malformed hosted health fields without disclosing values', async () => {
+    server = await startAdminServer(0, async () => ({
+      capabilities: { mode: 'SECRET', canControlSessions: 'true' },
+      health: { overall: 'SECRET', components: { plugin: { state: 'SECRET', version: '/private/SECRET', token: 'SECRET' } } },
+    }));
+    const response = await fetch(`${server.url}${HOSTED_HEALTH_PATH}`, { headers: { origin: 'https://deck.dionlabs.ai' } });
+    const body = await response.json();
+    expect(body.capabilities).toMatchObject({ mode: 'offline', canControlSessions: false });
+    expect(body.health).toMatchObject({ overall: 'action-required', components: { plugin: { state: 'action-required' } } });
+    expect(JSON.stringify(body)).not.toContain('SECRET');
+    expect(body.health.components.plugin).not.toHaveProperty('version');
+  });
+
 });
