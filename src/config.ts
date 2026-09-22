@@ -1,4 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { accessSync, closeSync, constants, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -177,8 +178,7 @@ export function saveWorkflows(
   const raw = readConfigForUpdate(path);
   raw.workflows = workflows;
   raw.workflowsLibrary = workflowsLibrary;
-  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeConfigAtomically(path, raw);
   return path;
 }
 
@@ -190,8 +190,7 @@ export function saveDeckSettings(
   const path = sourcePath ?? 'config.json';
   const raw = readConfigForUpdate(path);
   raw.deck = settings;
-  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeConfigAtomically(path, raw);
   return path;
 }
 
@@ -203,8 +202,7 @@ export function saveDeckLayout(
   const path = sourcePath ?? 'config.json';
   const raw = readConfigForUpdate(path);
   raw.layout = layout;
-  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeConfigAtomically(path, raw);
   return path;
 }
 
@@ -224,8 +222,7 @@ export function saveAppServerUrl(explicitPath: string | undefined, url: string |
     else delete raw.appServer;
   }
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeConfigAtomically(path, raw);
   return path;
 }
 
@@ -239,8 +236,7 @@ export function saveSurfaceMode(
   const raw = readConfigForUpdate(path);
   raw.surface = { ...(isRecord(raw.surface) ? raw.surface : {}), mode };
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  writeFileSync(path, `${JSON.stringify(raw, null, 2)}\n`, { mode: 0o600 });
-  chmodSync(path, 0o600);
+  writeConfigAtomically(path, raw);
   return path;
 }
 
@@ -265,4 +261,37 @@ function readConfigForUpdate(path: string): Record<string, unknown> {
   }
   if (!isRecord(raw)) throw new Error(`config at ${path} must be a JSON object`);
   return raw;
+}
+
+/** Commit complete bytes on the same filesystem; this is not a writer lock. */
+function writeConfigAtomically(path: string, raw: Record<string, unknown>): void {
+  let existing: ReturnType<typeof lstatSync> | undefined;
+  try {
+    existing = lstatSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  // Keep user-managed symlinks intact. A dangling link requires explicit repair.
+  const target = existing?.isSymbolicLink() ? realpathSync(path) : path;
+  if (existing) accessSync(target, constants.W_OK);
+  const temporary = join(dirname(target), `.sdm-config-${randomUUID()}.tmp`);
+  let descriptor: number | undefined;
+  let ownsTemporary = false;
+  try {
+    descriptor = openSync(temporary, 'wx', 0o600);
+    ownsTemporary = true;
+    writeFileSync(descriptor, `${JSON.stringify(raw, null, 2)}\n`, 'utf8');
+    fsyncSync(descriptor);
+    closeSync(descriptor);
+    descriptor = undefined;
+    renameSync(temporary, target);
+    ownsTemporary = false;
+  } finally {
+    if (descriptor !== undefined) {
+      try { closeSync(descriptor); } catch { /* Preserve the original write error. */ }
+    }
+    if (ownsTemporary) {
+      try { rmSync(temporary, { force: true }); } catch { /* Preserve the original error; staging remains private. */ }
+    }
+  }
 }
