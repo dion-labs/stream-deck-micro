@@ -17,7 +17,7 @@ local bridge, Control Room, sessions, and behavior model.
 
 ## Download the native macOS app
 
-**[Download the Apple Silicon preview](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.4)** · [Guided setup](https://deck.dionlabs.ai/setup/) · [Install and upgrade notes](docs/native-app.md)
+**[Download the Apple Silicon preview](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.5)** · [Guided setup](https://deck.dionlabs.ai/setup/) · [Install and upgrade notes](docs/native-app.md)
 
 The full Control Center now runs in a native macOS app, with menu-bar status,
 optional task notifications, and automatic connection at login. Node and the
