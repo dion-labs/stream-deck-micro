@@ -1,5 +1,13 @@
 # SDM sustained-work record — 2026-09-22
 
+## Current result — alpha.7
+
+Published preview: [v0.2.0-alpha.7](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.7), native build **26**, source `5005b7f`; PR22 merged at `07592fd806c7454272737e453c29687b84544d99`. Full suite: **419 passed**, four default opt-in skips; the unchanged isolated integration suite passed six tests earlier this burn. Marketplace 13, native policy, independent reviews and extracted-artifact/browser checks passed. Published ZIP SHA256: `3a2909ca7bffc0cae9fab8116d3ea2336e96c4f24b649c92551d21e5a089c917`.
+
+Completed release milestones cover HTTP/privacy and IPC request hardening, malformed-config preservation, keyboard/held-key controls, atomic config replacement, fragmented UTF-8/EOF recovery and strict slot targeting. **42 stable QA cases** are defined below. Later chronological receipts supersede earlier candidate/build/risk statements.
+
+The [current acceptance checklist](acceptance-checklist.md) gives exact remaining physical, Desktop, login, native install/accessibility, browser-permission and clipboard/config-repair checks. All remain unrun. Concurrent configuration writers can still lose updates; tested atomic replacement does not provide process serialization or certified power-loss durability. No installed app or live session was restarted and no website was deployed.
+
 ## Baseline and boundaries
 
 Baseline revision: `e98c9ec46b29411a5e3fb27a63d5cd9b03dd0c83`. Preexisting status:
@@ -34,7 +42,7 @@ Stable IDs below identify flow, failure, recovery and privacy requirements. Mapp
 | SDM-012 | Native launcher install/update in disposable target | Correct artifacts and version; no unsigned unexpected executable | native:test; manual signature/upgrade |
 | SDM-013 | Exercise marketplace plugin reconnect and heartbeat | Versions/device counts truthful; stale plugin state ages out | marketplaceService tests; marketplace:validate; manual plugin |
 | SDM-014 | Physical key actions and virtual deck configure/armed modes | Configure does not execute; armed action matches assignment once | deck tests; manual real MK.2 |
-| SDM-015 | Keyboard/screen-reader and narrow Control Room navigation | Focus visible, controls named, error/recovery accessible | Manual browser accessibility |
+| SDM-015 | Keyboard/screen-reader and narrow Control Room navigation | Focus visible, controls named, error/recovery accessible | scripts/test-control-room.mjs; manual native VoiceOver |
 
 ## Deferred acceptance and next checkpoint
 
@@ -66,10 +74,10 @@ Expanded risk registry: P0 = unauthorized action/privacy/session loss; P1 = brok
 | SDM-031 | P1 / recovery | Focus/unread storage missing or unknown format | Preserve selection/attention; no spurious workflow | focus.test.ts; unread.test.ts |
 | SDM-032 | P1 / happy | Swap session assignments among fifteen positions | Distinct slot binding and labels retained | slotManager.test.ts; deck.test.ts; manual Control Room |
 | SDM-033 | P0 / privacy | Export diagnostics with fictional paths/prompts/token | Sensitive values absent; useful component status remains | runtimeStatus.test.ts; manual clipboard inspection |
-| SDM-034 | P1 / recovery | IPC malformed messages, broken connection, timeout | No daemon crash; explicit bounded failure; subsequent request succeeds | Coverage gap: src/ipc.ts; disposable child fixture required |
+| SDM-034 | P1 / recovery | IPC malformed messages, broken connection, timeout | No daemon crash; explicit bounded failure; subsequent request succeeds | src/ipc.test.ts + src/ipc.client.test.ts; extracted bundled-runtime verifier |
 | SDM-035 | P1 / platform | Artifact install/update/uninstall in disposable profile | Version/checksum/signature match; saved assignments preserved | native package validation + manual macOS upgrade |
 | SDM-036 | P2 / platform | Safari/Chrome hosted connect denied and granted | Truthful read-only health or usable local fallback; no silent mutation | Manual browser permission matrix; deck-site coordination |
-| SDM-037 | P2 / accessibility | Keyboard-only narrow window, focus, labels, dialogs | Operable controls, visible focus, readable failure/recovery | Manual Control Room + native accessibility |
+| SDM-037 | P2 / accessibility | Keyboard-only narrow window, focus, labels, dialogs | Operable controls, visible focus, readable failure/recovery | scripts/test-control-room.mjs; manual native accessibility |
 
 Every manual receipt must state date, app/OS/device versions, fixture, action, expected versus actual result, and cleanup. Test automation may not substitute for the physical, login, signed-artifact or browser permission gates.
 
@@ -175,3 +183,15 @@ CLI now validates decimal1..15 first and fixes the zero-based status header. One
 ### Alpha.7 reviewed artifact receipt
 
 Independent review cleared exact source: commandIndices.ts SHA2561ad54e039fe728569ed25f293d0abfcedf8b613066de3f76dbb5250c3ebaab05, main.ts bf5d0b3f68f52de39e41144171534a0f9457722b6b6d25ab667466225ebd68ce, CLI813c82189c300990c7a3dbe8c871ef0cd159e131dc109538f8077f73ff9510c4. Independent55focused pass. Full419pass/4opt-in skips; unchanged optional6 previously passed in isolated HOME. Nativealpha.7/build26 resource-wrapped build succeeded; extracted exact version/build, strict signature, plugin, config fault preservation, fragmentedIPC/EOF, HTTPprivacy, actual bundledCLI invalid-no-dispatch and15→14 plus compilednull guards and full syntheticChrome controls all pass. Logs `/tmp/dionlabs-burn-deck-alpha7-{check,build,artifact}.log`. ZIP SHA256 `3a2909ca7bffc0cae9fab8116d3ea2336e96c4f24b649c92551d21e5a089c917`. Next PR/CI/publish/site receipt. No live app/session/hardware/userdata changed.
+
+
+### Alpha.7 publication
+
+[PR22](https://github.com/dion-labs/stream-deck-micro/pull/22) merged at
+`07592fd806c7454272737e453c29687b84544d99`; bridge and Marketplace CI passed.
+The non-draft prerelease was published at 2026-09-22T08:08:38Z with ZIP and
+SHA256SUMS. GitHub's uploaded ZIP digest matches the validated local artifact:
+`3a2909ca7bffc0cae9fab8116d3ea2336e96c4f24b649c92551d21e5a089c917`.
+Source is `5005b7f`, native build 26. Site worker received exact asset URLs,
+digest and CI evidence for independent verification and local link updates;
+website deployment remains outside this task.

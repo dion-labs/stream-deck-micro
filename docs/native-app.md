@@ -124,3 +124,7 @@ narrow screenshots. The harness closes only its own browser and fixture server. 
 the browser checks against the extracted ZIP with its bundled Node executable.
 It does not connect to the real bridge, Codex, or hardware. Real Safari permission,
 VoiceOver, native-window and physical-deck acceptance remain separate checks.
+
+## Acceptance status
+
+For the current preview, see the [remaining acceptance checklist](acceptance-checklist.md). It separates verified archive/runtime behavior from physical hardware and installed native flows that still need a coordinated test window.
