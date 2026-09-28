@@ -73,3 +73,12 @@ Separate observed compatibility limitation: current Desktop's nested CodexCLI
 executable layout is not recognized by the legacy default path. No installed
 Desktop setup acceptance is claimed; preserve this as the next independent
 milestone with executable identity/fingerprint/session guards intact.
+
+
+Final test-strengthening receipt: staging-close regression now counts every close
+attempt for the released descriptor, including a second attempt after its tracking
+entry disappeared. In a disposable source copy, restoring the old close ordering
+fails with2attempts where1isexpected; current source passes. Logs:
+/tmp/dionlabs-deck-20260928-staging-regression.log and
+/tmp/dionlabs-deck-20260928-cleanup-final.log (24passed). Runtime source and built
+artifact are unchanged. This closes a weakness in the test assertion itself.

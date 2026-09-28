@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-const faults = vi.hoisted(() => ({ close: false, stagingClose: false, stagingCloses: 0, write: false, unsupported: false, wrongOwner: false, descriptors: new Map<number, string>(), leaked: [] as number[], closes: 0 }));
+const faults = vi.hoisted(() => ({ close: false, stagingClose: false, stagingCloses: 0, stagingFd: -1, closeAttempts: [] as number[], write: false, unsupported: false, wrongOwner: false, descriptors: new Map<number, string>(), leaked: [] as number[], closes: 0 }));
 vi.mock('node:fs', async original => {
   const fs = await original<typeof import('node:fs')>();
   return {
@@ -18,8 +18,9 @@ vi.mock('node:fs', async original => {
       return fs.writeFileSync(...args);
     },
     closeSync: (fd: number) => {
+      faults.closeAttempts.push(fd);
       if (faults.stagingClose && faults.descriptors.get(fd)?.endsWith('.tmp')) {
-        faults.stagingCloses++; faults.descriptors.delete(fd); fs.closeSync(fd); throw new Error('staging close fixture');
+        faults.stagingCloses++; faults.stagingFd = fd; faults.descriptors.delete(fd); fs.closeSync(fd); throw new Error('staging close fixture');
       }
       if (faults.descriptors.get(fd)?.endsWith('.lock')) {
         faults.closes++;
@@ -39,7 +40,7 @@ let root: string, path: string;
 let warning: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'sdm-cleanup-')); path = join(root, 'config.json');
-  faults.stagingClose = false; faults.stagingCloses = 0;
+  faults.stagingClose = false; faults.stagingCloses = 0; faults.stagingFd = -1; faults.closeAttempts.length = 0;
   faults.close = faults.write = faults.unsupported = faults.wrongOwner = false; faults.closes = 0;
   writeFileSync(path, JSON.stringify({ deck: DEFAULT_DECK_SETTINGS, fixture: 'preserve' }));
   warning = vi.spyOn(process, 'emitWarning').mockImplementation(() => {});
@@ -111,7 +112,9 @@ it('initializer preserves even a read-only existing file', () => {
 it('never retries staging close after a failure that already released its fd', () => {
   const before = readFileSync(path, 'utf8'); faults.stagingClose = true;
   expect(() => saveDeckSettings(path, DEFAULT_DECK_SETTINGS)).toThrow('staging close fixture');
-  expect(faults.stagingCloses).toBe(1); expect(readFileSync(path, 'utf8')).toBe(before);
+  expect(faults.stagingCloses).toBe(1);
+  expect(faults.closeAttempts.filter(fd => fd === faults.stagingFd)).toHaveLength(1);
+  expect(readFileSync(path, 'utf8')).toBe(before);
   faults.stagingClose = false;
   expect(() => saveDeckSettings(path, DEFAULT_DECK_SETTINGS)).not.toThrow();
 });
