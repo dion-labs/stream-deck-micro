@@ -33,3 +33,9 @@ write-failure protections; directory-fsync/power-loss certification is not claim
 Apple Silicon, macOS 14+. Unnotarized, ad-hoc signed alpha preview. No installed
 app, live session, real configuration or hardware was used in QA. Physical and
 native lifecycle acceptance remain separate gates.
+
+Compatibility note: a newly observed Desktop bundle layout places Codex in a
+nested `CodexCLI.app`. Micro's default verification still targets the legacy
+executable path and fails when only the nested layout exists. That resolver
+follow-up is separate from this configuration release; installed Desktop
+acceptance is not claimed here.

@@ -49,3 +49,27 @@ Sep28 full current-tree check PASS:35files,463passed/4defaultoptinskips, TypeScr
 
 
 Separate follow-on observed during Sep28 reconciliation (no source changes in frozen alpha.8): src/sharedRuntime.ts still hardcodes /Applications/ChatGPT.app/Contents/Resources/codex, which is now absent. The freshly installed bundle instead has Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex (Sep26 timestamp). Isolated integration explicitly targets the current binary, but default shared verification/install still uses the missing old path. This is an evidenced future compatibility milestone; any resolver change must preserve exact executable identity/fingerprinting and existing-session safety. Do not mix it into the transaction release or claim current Desktop acceptance. No live command/install/restart run.
+
+
+## Alpha.8 qualified artifact — 2026-09-28
+
+Native build27 completed under the shared resource lock. Final extracted ZIP
+passed all17 transaction process tests using its bundled Node and compiled
+configuration code, including contention, initialization races and killed-owner
+recovery. Existing config write-fault, HTTP/privacy, fragmented IPC/EOF and CLI
+safety checks passed, as did Control Room keyboard/held-key/recovery/narrow-layout
+browser checks. Exact version/build, strict deep signature, plugin and checksum
+passed. Log: /tmp/dionlabs-deck-20260928-alpha8-artifact.log.
+
+ZIP SHA256: b89b59efb024f93838a61c2875e5dfbb91c350f3c32dea94d3877125a1d6578b.
+Full463passed/4defaultskips; fresh isolated current-Codex integration6passed;
+Marketplace13passed. Independent24boundary/cleanup checks and implementation
+review cleared current runtime source. PR24 first CI run passed bridge and
+Marketplace; final evidence/fixture-whitespace commit follows, then latest CI,
+merge, actual release and site receipt. Runtime code is unchanged since review.
+One final empty line in the test fixture was removed; this is not a code change.
+
+Separate observed compatibility limitation: current Desktop's nested CodexCLI
+executable layout is not recognized by the legacy default path. No installed
+Desktop setup acceptance is claimed; preserve this as the next independent
+milestone with executable identity/fingerprint/session guards intact.

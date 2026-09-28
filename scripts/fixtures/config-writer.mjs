@@ -65,4 +65,3 @@ try {
   process.exitCode = 1;
 }
 // The bounded descendant holds only the test control pipe; never signal it by PID.
-

@@ -1,7 +1,7 @@
 # Configuration transactions — design for independent review
 
 Status: **design approved and implementation reviewed on 2026-09-28; alpha.8
-artifact qualification pending**. The approved revision had SHA256
+artifact qualification passed**. The approved revision had SHA256
 `a3d9366186ef69d1621079b8ac5a72755e1ef8c7b87607742fb78ab7bbcf3789`.
 The design and review requests below retain the original decision record. Baseline: `f3097e33087cad15cdf74aa7a39bf256d19e06c6`, published
 alpha.7/build26 remains immutable. Scope includes the five configuration update APIs in
