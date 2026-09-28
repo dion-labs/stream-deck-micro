@@ -7,7 +7,7 @@ vi.mock('node:fs', async original => {
   return {
     ...fs,
     openSync: (...args: Parameters<typeof fs.openSync>) => {
-      if (faults.stage === 'open-existing') {
+      if (faults.stage === 'open-existing' && String(args[0]).endsWith('.tmp')) {
         fs.writeFileSync(args[0], 'existing staging fixture', { flag: 'wx', mode: 0o600 });
         throw Object.assign(new Error('fixture existing file'), { code: 'EEXIST' });
       }
@@ -58,12 +58,12 @@ describe.each(writers)('%s atomic config persistence', (_, save) => {
     expect(save).toThrow(/fixture/);
     expect(readFileSync(path, 'utf8')).toBe(original);
     expect(statSync(path).mode & 0o777).toBe(0o640);
-    expect(readdirSync(directory)).toEqual(['config.json']);
+    expect(readdirSync(directory).sort()).toEqual(['.stream-deck-micro-config.lock', 'config.json']);
     faults.stage = '';
     save();
     expect(JSON.parse(readFileSync(path, 'utf8'))).toMatchObject({ fixture: 'Keep every original byte.', admin: { port: 18531 } });
     expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(readdirSync(directory)).toEqual(['config.json']);
+    expect(readdirSync(directory).sort()).toEqual(['.stream-deck-micro-config.lock', 'config.json']);
   });
   it('never removes a staging path it failed to create exclusively', () => {
     faults.stage = 'open-existing';

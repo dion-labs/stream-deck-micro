@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APP_DIR, loadConfig } from './config.js';
+import { APP_DIR, createConfigIfAbsent, loadConfig } from './config.js';
 import { readSharedInstall, SHARED_INSTALL_STATE } from './sharedRuntime.js';
 import { installSharedServer } from './sharedServer.js';
 import { ensureMarketplaceService, installMarketplaceService } from './marketplaceService.js';
@@ -20,10 +20,8 @@ export async function setupNativeApp(): Promise<void> {
   if (existing && existing.configPath !== configPath) throw new Error('An existing custom installation needs manual upgrade; it was left unchanged.');
   if (existsSync(servicePath)) throw new Error('An existing bridge is installed. Follow the upgrade guide to preserve its configuration.');
   mkdirSync(APP_DIR, { recursive: true, mode: 0o700 });
-  if (!existsSync(configPath)) {
-    writeFileSync(configPath, JSON.stringify({ surface: { mode: 'marketplace' }, attachExternal: true,
-      slots: { count: 15, cwd: homedir() }, admin: { enabled: true, port: 17531 } }, null, 2), { mode: 0o600, flag: 'wx' });
-  }
+  createConfigIfAbsent(configPath, { surface: { mode: 'marketplace' }, attachExternal: true,
+    slots: { count: 15, cwd: homedir() }, admin: { enabled: true, port: 17531 } });
   const { config } = loadConfig(configPath);
   if (config.surface.mode !== 'marketplace' || !config.admin.enabled || config.admin.port !== 17531) {
     throw new Error('An existing custom configuration needs manual setup; it was left unchanged.');

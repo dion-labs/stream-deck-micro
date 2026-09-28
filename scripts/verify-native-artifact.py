@@ -157,6 +157,8 @@ try {
 ''')
  env={'PATH':'/usr/bin:/bin','HOME':scratch,'TMPDIR':scratch}
  subprocess.run([str(runtime/'bin/node'),str(smoke),str(runtime)],check=True,env=env,timeout=30)
+ env['SDM_RUNTIME_ROOT']=str(runtime)
+ subprocess.run([str(runtime/'bin/node'),str(root/'node_modules/vitest/vitest.mjs'),'run','src/config.transaction.test.ts'],cwd=root,check=True,env=env,timeout=90)
  if os.environ.get('SDM_PLAYWRIGHT_MODULE'):
   env['SDM_PLAYWRIGHT_MODULE']=os.environ['SDM_PLAYWRIGHT_MODULE']
   env['SDM_RUNTIME_ROOT']=str(runtime)

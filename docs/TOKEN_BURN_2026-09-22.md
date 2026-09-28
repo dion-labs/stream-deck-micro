@@ -195,3 +195,27 @@ SHA256SUMS. GitHub's uploaded ZIP digest matches the validated local artifact:
 Source is `5005b7f`, native build 26. Site worker received exact asset URLs,
 digest and CI evidence for independent verification and local link updates;
 website deployment remains outside this task.
+
+
+### Transaction serialization design — pending independent review
+
+Following explicit prioritization, `docs/config-transaction-design.md` proposes
+one Darwin kernel lock spanning fresh read/modify/atomic write for all five
+writers. A permanent private per-directory sidecar avoids lease/PID reclamation
+and filename/case aliases; contenders fail promptly and may explicitly retry.
+The disposable Node22 primitive probe confirms EAGAIN during contention and
+reacquisition on the same inode after close. This is not product acceptance.
+SDM-043 through SDM-046 are planned real-process, killed-owner, fault/privacy and
+caller/artifact cases; they are NOT RUN. Source implementation has not started;
+root independent design review is required first. Alpha.7 remains immutable.
+
+
+## Revised design ready for independent clearance
+
+Revision 2: docs/config-transaction-design.md SHA256 a3d9366186ef69d1621079b8ac5a72755e1ef8c7b87607742fb78ab7bbcf3789 on codex/config-transactions. No implementation edits.
+
+Addresses reviewer omissions: nativeSetup config creation joins the same directory lock with fresh existence check; preexisting/custom/malformed content stays untouched, and defaults never overwrite a cooperating writer's newly created file. Explicit decision retains kernel-exclusive wx creation inside lock (private0600, fsync/close) to preserve the existing stronger no-overwrite behavior against a noncooperating creator. First-ever creation retains existing crash-partial-file limitation, explicitly recorded/tested; later saves preserve/reject partial data rather than recover destructively. This bounded preservation choice needs reviewer agreement; do not silently replace wx with overwrite-capable rename.
+
+Postcommit lock-close errors return committed success + exactly one SDM_CONFIG_LOCK_CLEANUP diagnostic; emission cannot throw the saved transaction into failure, no close retry. Main settings/workflow/layout publish memory as normal; physical autosleep stages before persistence. Precommit primary error remains unchanged with cleanup diagnostic separate. Added planned actual caller disk/memory outcomes and setup-vs-save in both orders, dual setup/no-overwrite, killed initializer cases. SDM043–046 planned, unrun.
+
+REQUEST ROOT: independent revised-design review/clearance before implementation per explicit instruction. Alpha7 immutable/site receiptcomplete/PR22–23attached. I will continue safe test-fixture planning and source-callsite audit while waiting, no production implementation.
