@@ -295,7 +295,7 @@ function readConfigForUpdate(path: string): Record<string, unknown> {
 }
 
 /** Caller holds the directory lock and supplies its pinned target. */
-function writeConfigAtomically(target: string, raw: Record<string, unknown>): void {
+export function writeConfigAtomically(target: string, raw: Record<string, unknown>): void {
   if (existsSync(target)) accessSync(target, constants.W_OK);
   const temporary = join(dirname(target), `.sdm-config-${randomUUID()}.tmp`);
   let descriptor: number | undefined;

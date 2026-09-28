@@ -1,6 +1,11 @@
 import { expect, it, vi } from 'vitest';
 import { reconnectSharedDesktop } from './sharedReconnect.js';
-function fixture() { return { running: vi.fn(() => true), verify: vi.fn(async () => {}), restart: vi.fn(async () => {}) }; }
+function fixture() { return { preflight: vi.fn(), running: vi.fn(() => true), verify: vi.fn(async () => {}), restart: vi.fn(async () => {}) }; }
+it('refuses unsupported recovery before checking processes, reinstalling, or restarting', async () => {
+ const d=fixture(); d.preflight.mockImplementation(() => { throw new Error('Modern recovery unsupported'); });
+ await expect(reconnectSharedDesktop('config','ws://local',true,d)).rejects.toThrow('unsupported');
+ expect(d.running).not.toHaveBeenCalled(); expect(d.verify).not.toHaveBeenCalled(); expect(d.restart).not.toHaveBeenCalled();
+});
 it('requires explicit approval before changing an active Desktop', async () => {
  const d=fixture(); await expect(reconnectSharedDesktop('config', 'ws://local', false, d)).rejects.toThrow('Confirm');
  expect(d.verify).not.toHaveBeenCalled(); expect(d.restart).not.toHaveBeenCalled();

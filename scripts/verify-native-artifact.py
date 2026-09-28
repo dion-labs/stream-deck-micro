@@ -67,6 +67,35 @@ try {
  syncBuiltinESMExports();
 }
 const {serveIpc, ipcCall} = await import(pathToFileURL(runtime + '/dist/ipc.js'));
+const executable = await import(pathToFileURL(runtime + '/dist/desktopExecutable.js'));
+const desktopFixture = join(process.env.TMPDIR, 'Desktop-fixture.app');
+const legacy = join(desktopFixture, executable.LEGACY_CLI);
+const modern = join(desktopFixture, executable.MODERN_CLI);
+fs.mkdirSync(join(desktopFixture, 'Contents/Resources'), {recursive:true});
+writeFileSync(legacy, 'synthetic', {mode:0o700});
+assert.equal(executable.resolveDesktopExecutable(desktopFixture), legacy);
+fs.mkdirSync(join(desktopFixture, 'Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS'), {recursive:true});
+writeFileSync(modern, 'synthetic', {mode:0o700});
+assert.equal(executable.resolveDesktopExecutable(desktopFixture), modern);
+fs.chmodSync(modern, 0o600);
+assert.throws(() => executable.resolveDesktopExecutable(desktopFixture));
+fs.rmSync(modern);
+fs.symlinkSync(legacy, modern);
+assert.throws(() => executable.resolveDesktopExecutable(desktopFixture), /symlink/);
+const {recoverPrivateCodex} = await import(pathToFileURL(runtime + '/dist/sharedServer.js'));
+const recoveryCalls = [];
+await assert.rejects(recoverPrivateCodex(undefined, 'ws://127.0.0.1:17532', {
+ installedExecutable: () => executable.MODERN_DESKTOP_CODEX,
+ readProcesses: () => '',
+ requestQuit: async () => recoveryCalls.push('quit'),
+ isRunning: () => {recoveryCalls.push('running'); return false;},
+ open: async () => recoveryCalls.push('open'),
+ wait: async () => recoveryCalls.push('wait'),
+ uninstall: async () => recoveryCalls.push('uninstall'),
+ signal: () => recoveryCalls.push('signal'),
+}), /Modern Desktop recovery is not supported/);
+assert.deepEqual(recoveryCalls, []);
+console.log('Extracted bundled runtime: modern/legacy resolver, invalid preferred path, symlink rejection and zero-effect modern recovery passed');
 const ipcPath = join(process.env.TMPDIR, 'i.sock');
 await serveIpc(ipcPath, (_cmd, args) => args);
 const unicode = 'caffè 👩‍💻 漢字';
@@ -158,7 +187,7 @@ try {
  env={'PATH':'/usr/bin:/bin','HOME':scratch,'TMPDIR':scratch}
  subprocess.run([str(runtime/'bin/node'),str(smoke),str(runtime)],check=True,env=env,timeout=30)
  env['SDM_RUNTIME_ROOT']=str(runtime)
- subprocess.run([str(runtime/'bin/node'),str(root/'node_modules/vitest/vitest.mjs'),'run','src/config.transaction.test.ts'],cwd=root,check=True,env=env,timeout=90)
+ subprocess.run([str(runtime/'bin/node'),str(root/'node_modules/vitest/vitest.mjs'),'run','src/config.transaction.test.ts','src/sharedInstall.transaction.test.ts'],cwd=root,check=True,env=env,timeout=90)
  if os.environ.get('SDM_PLAYWRIGHT_MODULE'):
   env['SDM_PLAYWRIGHT_MODULE']=os.environ['SDM_PLAYWRIGHT_MODULE']
   env['SDM_RUNTIME_ROOT']=str(runtime)

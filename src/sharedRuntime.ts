@@ -2,8 +2,9 @@ import { createHash } from 'node:crypto';
 import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { APP_DIR } from './config.js';
+import { isKnownDesktopExecutable, resolveDesktopExecutable } from './desktopExecutable.js';
 
-export const DESKTOP_CODEX = '/Applications/ChatGPT.app/Contents/Resources/codex';
+export { DESKTOP_CODEX } from './desktopExecutable.js';
 export const DESKTOP_ARCHIVE = '/Applications/ChatGPT.app/Contents/Resources/app.asar';
 export const SHARED_INSTALL_STATE = join(APP_DIR, 'shared-server.json');
 export const SHARED_RUNTIME_STATE = join(APP_DIR, 'shared-runtime.json');
@@ -33,10 +34,10 @@ export interface DesktopSharedRuntime {
   token?: string;
 }
 
-export function readSharedInstall(): DesktopSharedInstall | null {
+export function readSharedInstall(path = SHARED_INSTALL_STATE): DesktopSharedInstall | null {
   try {
-    const value = JSON.parse(readFileSync(SHARED_INSTALL_STATE, 'utf8'));
-    if (value.mode !== 'desktop-launch' || value.codexPath !== DESKTOP_CODEX
+    const value = JSON.parse(readFileSync(path, 'utf8'));
+    if (value.mode !== 'desktop-launch' || !isKnownDesktopExecutable(value.codexPath)
       || value.launcherPath !== DESKTOP_LAUNCHER
       || !/^[a-f0-9]{64}$/.test(value.fingerprint)
       || !/^[a-f0-9]{64}$/.test(value.token)
@@ -83,7 +84,7 @@ export function validateSharedEndpoint(value: string): string {
 }
 
 /** Pin both sides of the contract, not just the CLI's version string. */
-export async function desktopBuildFingerprint(files = [DESKTOP_CODEX, DESKTOP_ARCHIVE]): Promise<string> {
+export async function desktopBuildFingerprint(files = [resolveDesktopExecutable(), DESKTOP_ARCHIVE]): Promise<string> {
   const hash = createHash('sha256');
   for (const file of files) {
     const before = statSync(file);

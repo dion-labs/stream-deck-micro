@@ -7,8 +7,9 @@ import type { Readable, Writable } from 'node:stream';
 import WebSocket from 'ws';
 import {
   cleanDesktopEnvironment, desktopBuildFingerprint, readSharedInstall,
-  DESKTOP_CODEX, SHARED_RUNTIME_STATE, type DesktopSharedInstall,
+  DESKTOP_ARCHIVE, SHARED_RUNTIME_STATE, type DesktopSharedInstall,
 } from './sharedRuntime.js';
+import { resolveDesktopExecutable } from './desktopExecutable.js';
 
 /** Only intercept Desktop's local server, never CLI tools, code-mode hosts or subcommands. */
 export function sharedServerArguments(args: string[], endpoint: string): string[] | null {
@@ -37,7 +38,9 @@ export interface DesktopBridgeOptions {
   env?: NodeJS.ProcessEnv;
   install?: DesktopSharedInstall | null;
   binary?: string;
-  fingerprint?: () => Promise<string>;
+  resolveBinary?: () => string;
+  fingerprint?: (files: string[]) => Promise<string>;
+  readInstall?: () => DesktopSharedInstall | null;
   automaticVerify?: typeof verifyAutomaticDesktop;
   priorRuntime?: { fingerprint: string; mode: string; reason?: string; verificationGeneration?: string } | null;
   record?: (value: Record<string, unknown>) => void;
@@ -56,7 +59,9 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
   const diagnostics = options.diagnostics ?? process.stderr;
   const env = cleanDesktopEnvironment(options.env ?? process.env);
   const install = options.install === undefined ? readSharedInstall() : options.install;
-  const binary = options.binary ?? DESKTOP_CODEX;
+  const resolveBinary = options.resolveBinary ?? (options.binary === undefined ? resolveDesktopExecutable : () => options.binary!);
+  const binary = resolveBinary();
+  const readInstall = options.readInstall ?? (options.install === undefined ? readSharedInstall : () => options.install ?? null);
   const launch = options.launch ?? ((command, args, environment, shared) => spawn(command, args, {
     env: environment, stdio: [shared ? 'ignore' : 'pipe', shared ? 'ignore' : 'pipe', 'pipe'],
   }));
@@ -103,7 +108,7 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
     if (shutdownRequested) return 0;
     const desktopLaunch = options.args.some((arg) => arg.startsWith('mcp_servers.codex_app='));
     if (desktopLaunch) diagnostics.write(`[micro] Shared control disabled: ${reason}. Using Desktop's private server.\n`);
-    child = launch(binary, options.args, env, false);
+    child = launch(resolveBinary(), options.args, env, false);
     // Tool CLI invocations must not overwrite the main Desktop runtime marker.
     if (desktopLaunch) mark(blocked ? 'blocked' : 'private', reason);
     child.stdout!.pipe(output, { end: false });
@@ -120,7 +125,7 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
   try {
     if (shutdownRequested) return 0;
     if (!install || !sharedArgs) return await privateServer('not installed or unrecognized launch arguments');
-    fingerprint = await (options.fingerprint ?? desktopBuildFingerprint)();
+    fingerprint = await (options.fingerprint ?? desktopBuildFingerprint)([binary, DESKTOP_ARCHIVE]);
     if (shutdownRequested) return 0;
     let prior = options.priorRuntime;
     if (prior === undefined && !options.record) {
@@ -130,7 +135,7 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
     const priorMatches = prior?.fingerprint === fingerprint && prior.verificationGeneration === install.verificationGeneration;
     const retryTransient = install.autoConnect && priorMatches
       && prior?.mode === 'private' && isTransientVerificationFailure(prior.reason);
-    if (fingerprint !== install.fingerprint || retryTransient) {
+    if (binary !== install.codexPath || fingerprint !== install.fingerprint || retryTransient) {
       if (!install.autoConnect) return await privateServer('Desktop build changed; compatibility verification required');
       diagnostics.write('[micro] Verifying Desktop before connecting automatically.\n');
       fingerprint = await (options.automaticVerify ?? verifyAutomaticDesktop)(install, {
@@ -138,12 +143,18 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
         onRetry: (attempt) => diagnostics.write(`[micro] Transient verification failure; automatic retry ${attempt}/2.\n`),
       });
       if (shutdownRequested) return 0;
-      if (!options.automaticVerify) verificationGeneration = readSharedInstall()?.verificationGeneration;
+      verificationGeneration = readInstall()?.verificationGeneration;
       verifiedThisLaunch = true;
     }
     // A known bad launch stays private until an explicit reinstall clears it.
     if (!verifiedThisLaunch && priorMatches && prior && prior.mode !== 'shared') {
       return await privateServer(prior.reason ?? 'previous shared startup failed; run shared install to retry', prior.mode === 'blocked');
+    }
+    const approval = readInstall();
+    if (resolveBinary() !== binary || !approval || approval.codexPath !== binary
+      || approval.fingerprint !== fingerprint || approval.token !== install.token || approval.url !== install.url
+      || approval.verificationGeneration !== verificationGeneration) {
+      return await privateServer('Desktop executable or shared installation changed; compatibility verification required');
     }
     const tokenHash = createHash('sha256').update(token).digest('hex');
     child = launch(binary, [...sharedArgs, '--ws-auth', 'capability-token', '--ws-token-sha256', tokenHash], env, true);

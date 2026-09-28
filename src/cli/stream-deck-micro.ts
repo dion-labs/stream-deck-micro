@@ -46,23 +46,21 @@ async function main(): Promise<void> {
   }
   if (command === 'shared') {
     if (args[0] === 'autoconnect') {
-      const { readSharedInstall, SHARED_INSTALL_STATE } = await import('../sharedRuntime.js');
-      const { writeFileSync } = await import('node:fs');
+      const { enableSharedAutoconnect } = await import('../sharedInstall.js');
       const { installDesktopAutoconnect } = await import('../desktopAutoconnect.js');
-      const install = readSharedInstall();
-      if (!install) throw new Error('Run shared install first');
+      enableSharedAutoconnect();
       installDesktopAutoconnect();
-      writeFileSync(SHARED_INSTALL_STATE, `${JSON.stringify({ ...install, autoConnect: true }, null, 2)}\n`, { mode: 0o600 });
       process.stdout.write('Automatic shared connection enabled for future GUI launches and login. Running Codex was not restarted.\n');
       return;
     }
-    const { installSharedServer, sharedServerStatus, uninstallSharedServer, openSharedCodexDesktop, recoverPrivateCodex, DESKTOP_CODEX } = await import(
+    const { installSharedServer, sharedServerStatus, uninstallSharedServer, openSharedCodexDesktop, recoverPrivateCodex } = await import(
       '../sharedServer.js'
     );
     const [action = 'status', ...sharedArgs] = args;
     if (action === 'verify') {
       const { verifyDesktopServer } = await import('../desktopCompatibility.js');
-      process.stdout.write(`${JSON.stringify(await verifyDesktopServer(DESKTOP_CODEX), null, 2)}\n`);
+      const { resolveDesktopExecutable } = await import('../desktopExecutable.js');
+      process.stdout.write(`${JSON.stringify(await verifyDesktopServer(resolveDesktopExecutable()), null, 2)}\n`);
       return;
     }
     if (action === 'open') {

@@ -17,7 +17,7 @@ local bridge, Control Room, sessions, and behavior model.
 
 ## Download the native macOS app
 
-**[Download the Apple Silicon preview](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.8)** · [Guided setup](https://deck.dionlabs.ai/setup/) · [Install and upgrade notes](docs/native-app.md)
+**[Download the Apple Silicon preview](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.9)** · [Guided setup](https://deck.dionlabs.ai/setup/) · [Install and upgrade notes](docs/native-app.md)
 
 The full Control Center now runs in a native macOS app, with menu-bar status,
 optional task notifications, and automatic connection at login. Node and the
@@ -222,6 +222,12 @@ fails; it never quits or restarts an app to repair routing. This detects but doe
 not eliminate the macOS restore ordering race. `shared uninstall` removes the login agent and
 Micro's environment defaults. Other GUI programs can inherit these environment
 variables; the bridge passes unrelated CLI commands through to the bundled binary.
+
+Both the newer nested `CodexCLI.app` and older bundled CLI layouts are recognized.
+Automatic recovery is unavailable for the newer layout: when work is idle, quit
+Desktop yourself and use the verified launcher. The recovery actions below apply
+to the older layout; newer-layout requests stop with an explanatory error before
+connection teardown, reinstall, or restart.
 
 If shared control is unhealthy, the recovery surface offers two deliberately
 different choices. **RETRY SHARED** attempts the verified integration again.
