@@ -1,6 +1,6 @@
 # Native macOS preview v0.2.0-alpha.9
 
-Candidate notes — artifact and independent review gates are still pending.
+Native build 28.
 
 This preview recognizes both supported Codex Desktop CLI layouts: the newer nested
 `CodexCLI.app` executable and the older `Contents/Resources/codex` executable.
@@ -30,7 +30,11 @@ installed upgrade/uninstall continuity still needs the manual acceptance window.
 - Six actual competing-process tests cover installation commit contention,
   stale approval rejection, and concurrent deletion/replacement during a probe.
 - Current isolated nested CLI: six tests passed, including real isolated shared startup.
-- Final extracted native artifact qualification: pending.
+- Extracted native ZIP: all 23 bundled process tests pass (17 configuration and six
+  installation-approval cases), plus compiled resolver/recovery checks, Control Room
+  browser controls, strict signature, exact version/build and checksum checks.
+- Independent source review and narrow caller-order rereview passed. Modern recovery
+  refusal precedes connection teardown, installation and restart effects.
 
 No running Desktop session was restarted and no installed configuration, real
 account or hardware was used as a test fixture. Native installation, login restore,
