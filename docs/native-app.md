@@ -1,6 +1,6 @@
 # Native macOS preview
 
-[Download v0.2.0-alpha.7](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.7)
+[Download v0.2.0-alpha.8](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.8)
 
 Codex + Stream Deck brings the full local Control Center into a macOS window:
 Slots, Sessions, Keys, Library, Device, menu-bar status, and opt-in task notifications.
@@ -128,3 +128,14 @@ VoiceOver, native-window and physical-deck acceptance remain separate checks.
 ## Acceptance status
 
 For the current preview, see the [remaining acceptance checklist](acceptance-checklist.md). It separates verified archive/runtime behavior from physical hardware and installed native flows that still need a coordinated test window.
+
+
+### Configuration coordination
+
+Updated Micro processes serialize configuration updates with a permanent private
+`.stream-deck-micro-config.lock` file in the configuration directory. An empty
+retained file is normal; it is not a stale owner and should not be deleted while
+writers run. A busy save reports an error that can be retried explicitly. Kernel
+ownership ends with descriptor lifetime, including process death. Older versions
+and external editors do not participate. Interrupted first-time creation can leave
+invalid bytes that require explicit repair; Micro will not discard them silently.

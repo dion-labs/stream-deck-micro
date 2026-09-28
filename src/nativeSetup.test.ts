@@ -1,8 +1,8 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-const m = vi.hoisted(() => ({ exists: vi.fn(), mkdir: vi.fn(), write: vi.fn(), read: vi.fn(), load: vi.fn(), shared: vi.fn(), ensure: vi.fn(), service: vi.fn(), auto: vi.fn() }));
+const m = vi.hoisted(() => ({ exists: vi.fn(), mkdir: vi.fn(), write: vi.fn(), read: vi.fn(), load: vi.fn(), create: vi.fn(), shared: vi.fn(), ensure: vi.fn(), service: vi.fn(), auto: vi.fn() }));
 vi.mock('node:fs', () => ({ existsSync: m.exists, mkdirSync: m.mkdir, writeFileSync: m.write }));
 vi.mock('node:os', () => ({ homedir: () => '/demo' }));
-vi.mock('./config.js', () => ({ APP_DIR: '/demo/.stream-deck-micro', loadConfig: m.load }));
+vi.mock('./config.js', () => ({ APP_DIR: '/demo/.stream-deck-micro', loadConfig: m.load, createConfigIfAbsent: m.create }));
 vi.mock('./sharedRuntime.js', () => ({ readSharedInstall: m.read, SHARED_INSTALL_STATE: '/demo/shared.json' }));
 vi.mock('./sharedServer.js', () => ({ installSharedServer: m.shared }));
 vi.mock('./marketplaceService.js', () => ({ ensureMarketplaceService: m.ensure, installMarketplaceService: m.service }));
@@ -22,7 +22,7 @@ it('installs the bridge CLI, not the launcher CLI, after verified setup', async 
   m.read.mockReturnValueOnce(null).mockReturnValue({ configPath, fingerprint: 'verified' });
   await setupNativeApp(); expect(m.shared).toHaveBeenCalledWith(configPath);
   expect(m.service).toHaveBeenCalledWith(configPath, expect.stringMatching(/\/cli\/stream-deck-micro\.js$/));
-  expect(m.auto).toHaveBeenCalledOnce(); expect(m.write.mock.calls[1][1]).toContain('"autoConnect": true');
+  expect(m.auto).toHaveBeenCalledOnce(); expect(m.write.mock.calls[0][1]).toContain('"autoConnect": true');
 });
 it('does not install a service if compatibility verification fails', async () => {
   m.shared.mockRejectedValue(new Error('unsupported Codex'));
@@ -35,4 +35,20 @@ it('resumes a partial setup without repeating shared installation', async () => 
 it('preserves custom configurations', async () => {
   m.exists.mockImplementation(p => p === configPath); m.load.mockReturnValue({ config: { surface: { mode: 'independent' }, admin: { enabled: true, port: 17531 } } });
   await expect(setupNativeApp()).rejects.toThrow('custom configuration'); expect(m.write).not.toHaveBeenCalled(); expect(m.shared).not.toHaveBeenCalled();
+});
+
+it('joins transactional first-run creation before reading or installing', async () => {
+  m.read.mockReturnValueOnce(null).mockReturnValue({ configPath });
+  await setupNativeApp();
+  expect(m.create).toHaveBeenCalledExactlyOnceWith(configPath, expect.objectContaining({ attachExternal: true, slots: { count: 15, cwd: '/demo' }, admin: { enabled: true, port: 17531 } }));
+  expect(m.create.mock.invocationCallOrder[0]).toBeLessThan(m.load.mock.invocationCallOrder[0]);
+});
+it('reports busy creation without starting shared or service installation', async () => {
+  m.create.mockImplementation(() => { throw new Error('Configuration is being updated; try again.'); });
+  await expect(setupNativeApp()).rejects.toThrow('being updated');
+  expect(m.load).not.toHaveBeenCalled(); expect(m.shared).not.toHaveBeenCalled(); expect(m.service).not.toHaveBeenCalled(); expect(m.write).not.toHaveBeenCalled();
+});
+it('rejects retained invalid first-creation bytes before installation', async () => {
+  m.create.mockReturnValue(false); m.load.mockImplementation(() => { throw new Error('invalid config'); });
+  await expect(setupNativeApp()).rejects.toThrow('invalid config'); expect(m.shared).not.toHaveBeenCalled(); expect(m.write).not.toHaveBeenCalled();
 });

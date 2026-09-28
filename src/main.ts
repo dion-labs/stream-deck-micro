@@ -9,12 +9,12 @@ import {
   DeckSettingsSchema,
   DeckLayoutSchema,
   loadConfig,
-  saveDeckSettings,
   saveDeckLayout,
   saveWorkflows,
   WorkflowSchema,
   type SurfaceMode,
 } from './config.js';
+import { persistDeckSettings } from './core/persistDeckSettings.js';
 import { validateCommandIndices } from './core/commandIndices.js';
 import { SlotManager } from './core/slotManager.js';
 import { DetachedSession } from './core/detachedSession.js';
@@ -430,15 +430,20 @@ export async function runDaemon(
         }
         break;
       case 'sleep':
-        if (config.deck.sleepKey === 'sleep') {
-          deck.sleep();
-        } else {
-          config.deck.autoSleep.enabled = !config.deck.autoSleep.enabled;
-          const path = saveDeckSettings(sourcePath, config.deck);
-          deck.setSettings(config.deck);
-          log(`auto sleep ${config.deck.autoSleep.enabled ? 'enabled' : 'disabled'} — saved to ${path}`);
+        try {
+          if (config.deck.sleepKey === 'sleep') {
+            deck.sleep();
+          } else {
+            const candidate = { ...config.deck, autoSleep: { ...config.deck.autoSleep, enabled: !config.deck.autoSleep.enabled } };
+            const path = persistDeckSettings(config, sourcePath, candidate, settings => deck.setSettings(settings));
+            log(`auto sleep ${config.deck.autoSleep.enabled ? 'enabled' : 'disabled'} — saved to ${path}`);
+          }
+          recordAction(action, 'accepted');
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          recordAction(action, 'blocked', reason);
+          log('sleep action blocked:', reason);
         }
-        recordAction(action, 'accepted');
         break;
       case 'attach': {
         try {
@@ -1039,9 +1044,7 @@ export async function runDaemon(
         return deck.status();
       case 'deck.settings.set': {
         const settings = DeckSettingsSchema.parse(args);
-        const path = saveDeckSettings(sourcePath, settings);
-        config.deck = settings;
-        deck.setSettings(settings);
+        const path = persistDeckSettings(config, sourcePath, settings, saved => deck.setSettings(saved));
         log(`deck settings saved to ${path}`);
         return { ...deck.status(), path };
       }
