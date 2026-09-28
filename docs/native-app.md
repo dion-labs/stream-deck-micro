@@ -1,6 +1,6 @@
 # Native macOS preview
 
-[Download v0.2.0-alpha.8](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.8)
+[Download v0.2.0-alpha.9](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.9)
 
 Codex + Stream Deck brings the full local Control Center into a macOS window:
 Slots, Sessions, Keys, Library, Device, menu-bar status, and opt-in task notifications.
@@ -44,6 +44,12 @@ Closing the Control Center window, or quitting this launcher, does not stop the
 background bridge or quit ChatGPT. Notifications are off until you enable them.
 
 ## Recover after a Codex crash
+
+The newer nested `CodexCLI.app` layout supports verification and shared startup,
+but automatic recovery is unavailable in this preview. Recovery controls report
+that limitation before changing the connection or restarting Desktop. When work
+is idle, quit Desktop yourself and open the verified launcher. The automatic
+recovery steps below apply to the older bundled CLI layout.
 
 If the Control Center says Navigation only, use **Reconnect Codex** beside
 Copy diagnostics. Confirm only when active work can pause: recovery first runs

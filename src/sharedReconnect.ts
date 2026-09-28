@@ -1,6 +1,7 @@
-import { desktopAppIsRunning, installSharedServer, restartSharedCodexDesktop } from './sharedServer.js';
+import { assertDesktopRecoverySupported, desktopAppIsRunning, installSharedServer, restartSharedCodexDesktop } from './sharedServer.js';
 
 export interface SharedReconnectDependencies {
+  preflight(): void;
   running(): boolean;
   verify(configPath: string | undefined, endpoint: string): Promise<unknown>;
   restart(endpoint: string): Promise<void>;
@@ -9,7 +10,9 @@ export interface SharedReconnectDependencies {
 export async function reconnectSharedDesktop(configPath: string | undefined, endpoint: string,
   restartApproved: boolean, deps: SharedReconnectDependencies = {
     running: desktopAppIsRunning, verify: installSharedServer, restart: restartSharedCodexDesktop,
+    preflight: assertDesktopRecoverySupported,
   }): Promise<void> {
+  deps.preflight();
   if (deps.running() && !restartApproved) throw new Error('Reconnecting requires reopening Codex. Confirm when active work can be interrupted.');
   await deps.verify(configPath, endpoint);
   // Codex may have opened while the isolated compatibility check was running.

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ConfigSchema, DeckLayoutSchema, saveAppServerUrl, saveSurfaceMode } from './config.js';
+import { DESKTOP_CODEX, MODERN_DESKTOP_CODEX } from './desktopExecutable.js';
 import {
   desktopConnectionFromOutputs,
   launchAgentPlist,
@@ -173,7 +174,7 @@ describe('shared App Server setup', () => {
       uninstall: async () => {},
       readProcesses: () => {
         reads += 1;
-        return reads === 1
+        return reads <= 2 // preflight and initial cleanup observation, then PID reuse
           ? `2099 1 ${codex} app-server --listen ${endpoint}`
           : '2099 1 /Applications/Unrelated.app/Contents/MacOS/helper';
       },
@@ -297,5 +298,37 @@ describe('shared App Server setup', () => {
       wait: async () => {},
     }, 1, async () => { updated = true; })).rejects.toThrow('did not quit');
     expect(updated).toBe(false);
+  });
+});
+
+describe('modern Desktop recovery boundary', () => {
+  it.each(['modern-only', 'mixed', 'saved-modern', 'selected-modern'])('refuses %s before any lifecycle effect', async kind => {
+    const calls: string[] = [];
+    const endpoint = 'ws://127.0.0.1:17532';
+    const modern = `2099 1 ${MODERN_DESKTOP_CODEX} app-server --listen ${endpoint}`;
+    const processes = kind === 'saved-modern' || kind === 'selected-modern' ? '' : kind === 'mixed'
+      ? `${modern}\n2100 1 ${DESKTOP_CODEX} app-server --listen ${endpoint}` : modern;
+    await expect(recoverPrivateCodex(undefined, endpoint, {
+      installedExecutable: () => kind === 'saved-modern' ? MODERN_DESKTOP_CODEX : null,
+      selectedExecutable: () => kind === 'selected-modern' ? MODERN_DESKTOP_CODEX : DESKTOP_CODEX,
+      requestQuit: async () => { calls.push('quit'); },
+      isRunning: () => { calls.push('is-running'); return false; },
+      open: async () => { calls.push('open'); }, wait: async () => { calls.push('wait'); },
+      uninstall: async () => { calls.push('uninstall'); }, readProcesses: () => processes,
+      signal: () => { calls.push('signal'); },
+    })).rejects.toThrow('Modern Desktop recovery is not supported');
+    expect(calls).toEqual([]);
+  });
+
+  it('does not broaden the signaling predicate to modern listeners', () => {
+    const endpoint = 'ws://127.0.0.1:17532';
+    expect(managedSharedListenerPids(`2099 1 ${MODERN_DESKTOP_CODEX} app-server --listen ${endpoint}`, endpoint)).toEqual([]);
+  });
+
+  it.each([DESKTOP_CODEX, MODERN_DESKTOP_CODEX])('requires Desktop ancestry for private classification of %s', binary => {
+    const server = `2099 2000 ${binary} app-server`;
+    expect(processListHasDesktopPrivateAppServer(`2000 1 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n${server}`)).toBe(true);
+    expect(processListHasDesktopPrivateAppServer(`2000 1 /Applications/Other.app/Contents/MacOS/Other\n${server}`)).toBe(false);
+    expect(processListHasDesktopPrivateAppServer(`2000 1 /Applications/ChatGPT.app/Contents/MacOS/ChatGPT\n${server.replace(binary, binary + '-fake')}`)).toBe(false);
   });
 });

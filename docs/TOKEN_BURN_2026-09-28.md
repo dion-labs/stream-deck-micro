@@ -82,3 +82,84 @@ fails with2attempts where1isexpected; current source passes. Logs:
 /tmp/dionlabs-deck-20260928-staging-regression.log and
 /tmp/dionlabs-deck-20260928-cleanup-final.log (24passed). Runtime source and built
 artifact are unchanged. This closes a weakness in the test assertion itself.
+
+
+ALPHA.8 PUBLISHED — actual receipt
+
+https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.8
+Non-draft prerelease published2026-09-28T18:52:16Z; source2f9ac2f/build27.
+PR24 https://github.com/dion-labs/stream-deck-micro/pull/24 merged7c40239e8ff174d9fb4fadf5016de9ac0f9253f5;
+latest CI bridge47s and Marketplace20s passed.
+ZIP https://github.com/dion-labs/stream-deck-micro/releases/download/v0.2.0-alpha.8/Codex-Stream-Deck-0.2.0-alpha.8-macOS-arm64.zip
+53,752,646bytes; SHA256 b89b59efb024f93838a61c2875e5dfbb91c350f3c32dea94d3877125a1d6578b matches uploaded API digest.
+Checksum https://github.com/dion-labs/stream-deck-micro/releases/download/v0.2.0-alpha.8/SHA256SUMS
+Full463 + isolated6 + Marketplace13 + final bundled17process/browser/signature/version/hash allpass;
+independent design/implementation review cleared. Cooperating config writers nowserialize;
+first native creation same lock, busy retry truthful, postcommit cleanup respects saved memory.
+Limits explicit: samefield/oldwriters/externaleditors, partialfirstwxcreate, powerloss and wideradminoperations.
+Release notes ALSO disclose preexisting new Desktop nested-executable layout unsupported by legacydefaultpath;
+resolver follow-up pending, do not claim current installed Desktop acceptance.
+Please independently verify assets and update local alpha.8 download/version/notes links with targeted QA;
+NO website deploy/push authorized. Root please attachPR24 if not already attached/resume siteworker if idle.
+
+
+Next concrete follow-up proposed: docs/desktop-bundle-layout-design.md SHA256 c9ac3dff1eca657571988d7a01a19d40e519804fa5702178ef0baf4a9bbad4b9, branchcodex/desktop-bundle-layout from7c40239. Read-only evidence confirms nestedCLIexists/legacyabsent; isolatedcurrentCLI6pass. Plan preserves knownpathallowlist, recordedlegacyinstalls, pinnedprobe/fingerprint/save, noforwardreplay and exactprocessrecoveryguards. SDM047–049 planned syntheticdiscovery/verification/processidentity coverage. REQUEST root independent boundary/design review before this trust-sensitive implementation; alpha8 remainsfrozen/published, siteactualreceiptpending. No current sourcebehavior changed on newbranch.
+
+
+2026-09-28 layout follow-up audit: design hash remains c9ac3dff1eca657571988d7a01a19d40e519804fa5702178ef0baf4a9bbad4b9, no runtime implementation pending independent root review. Regressions-first found automaticVerification.ts currently guards token/URL/fingerprint but NOT verificationGeneration or codexPath. Added two synthetic changed-record cases to existing test; fresh narrow result10pass/2expectedfail, /tmp/dionlabs-deck-20260928-layout-regressions.log. A newer generation with the same fingerprint is otherwise overwritten, and path mutation can approve a record different from the probe. Include equality of original generation/path in compare-before-save; saved path migration only from verified selected path. These are preexisting guard gaps relevant to migration, not alpha8 transaction regressions. No private files/real process interaction.
+Site independently verified alpha8 assets and updated local links/limitation copy; its targeted3engine layout/link qualification is queued (not yet passed).
+
+Regression preparation expanded safely: src/sharedRuntime.test.ts uses a disposable APP_DIR and12 saved-record cases. Legacy acceptance +10 arbitrary/prefix/type rejects PASS; modern exact allowlist acceptance fails as expected. Combined fresh run21pass/3expectedfail with automaticVerification cases; runtime source remains untouched. Updated log /tmp/dionlabs-deck-20260928-layout-regressions.log. Await independent design scope decision, particularly modern recovery signaling.
+
+ALPHA.8 LOCAL SITE HANDOFF COMPLETE: deck-site independently verified actual uploaded release assets/checksum, updated home/setup links and compatibility limitation, and passed fresh WEB-011 Chrome/Firefox/WebKit at1440/768/390/320. Build/diffcheck pass; dated evidence under site docs/evidence/2026-09-28/alpha8/. No deployment/push. This closes publication/link milestone; next layout candidate remains tests/design only, root independent review pending.
+
+DESKTOP LAYOUT IMPLEMENTATION — frozen boundary review requested
+Root scoped design accepted and four clarifications documented in revised
+`docs/desktop-bundle-layout-design.md`. Current runtime candidate frozen; hashes
+in `docs/desktop-layout-candidate-sha256.txt` (no alpha9 metadata yet).
+Modern/legacy resolver rejects symlink root/components/candidates, invalid preferred
+modern fails closed; default imports still work without Desktop. Saved exact paths
+allow both; hashes/probe/final commit/launch pin path. All FIVE installation writers
+(shared install/delete, native enable, CLI enable, automatic verification) now use
+sharedInstall.updateSharedInstall and existing kernel directory lock; auto compare
+of original token/URL/path/fingerprint/generation/config/launcher occurs inside
+locked update, no probe lock. Atomic writer reused by exporting existing function,
+no implementation change to released config transactions.
+Modern recovery refuses BEFORE quit/uninstall/signal, including mixed listeners,
+modern installed/selected layout; generic/default and explicit shared restart also
+refuse modern. Legacy signaling functions remain unchanged. Generated launcher
+always uses validating bridge for private passthrough; if runtime missing it refuses
+with repair diagnostic, never falls back to an unchecked/stale executable path.
+Fresh narrow55unitPASS +32recoveryPASS +41bridge/launcherPASS (before latest5additional
+bridge race cases). Six actual competing-process CAS cases PASS under resource lock:
+barrier after compare/before stagingwrite blocks other verify/enable/delete/replace;
+probe holds no lock and concurrent deletion/replacement prevent stale approval.
+Logs /tmp/dionlabs-deck-20260928-layout-{focused,recovery,bridge,transactions}.log.
+Build PASS. Full check with new bridge cases is currently resource-queued, not yet
+passed. Need independent frozen review, isolatedcurrentCLI/full/extractednewartifact
+before alpha9 release request. Alpha8 + local sitehandoff COMPLETE/immutable.
+No live Desktop/daemon/config/account/hardware operation or website deployment.
+
+
+## Desktop layout qualification ledger (candidate, unreleased)
+
+| Case | Required boundary | Evidence so far | Remaining qualification |
+|---|---|---|---|
+| SDM-047 | Exact modern/legacy discovery; no PATH fallback, symlink escape or invalid-modern downgrade | 12 synthetic resolver cases pass; saved-record allowlist and fingerprint path identity pass | Final full suite and extracted compiled resolver smoke |
+| SDM-048 | Same selected path for hash/probe/save/launch; serialized final comparison against saved generation/path/token/URL/fingerprint | Original three red regressions now pass; six actual competing-process final-commit/probe races pass; existing bridge/launcher 41 pass before five new race cases | Full suite including five new bridge cases, current isolated CLI, bundled six-process race suite, frozen independent review |
+| SDM-049 | Modern status classification, exact ancestry; modern recovery refuses before any lifecycle effect; legacy signal predicates unchanged | Synthetic lifecycle cases cover modern-only/mixed/saved/selected modern and no effect; private classification covers both exact paths and impostors | Full suite, extracted compiled zero-effect refusal and independent source review |
+
+The current frozen candidate manifest is `desktop-layout-candidate-sha256.txt`.
+New installation launchers use the validating bridge even after uninstall; a missing
+runtime now produces a repair diagnostic instead of an unchecked native fallback.
+Existing older launchers retain their on-disk text until explicit setup/reinstall;
+qualification of upgrading/removing an installed older bundle remains a manual gate.
+No installed-state migration or real Desktop account/session acceptance is claimed.
+
+Frozen layout candidate fullcheck PASS: build +511tests/4defaultoptinskips across38files, /tmp/dionlabs-deck-20260928-layout-full.log. Manifest all18hashes stillmatch, including five new bridge races. Six realprocess CAS tests included. Current explicit nestedCLI isolatedintegration queued underlock next (no Desktop/account/hardware). Request exclusivealpha9slot subject independentfrozenreview +integration +newartifact/signature/hash/bundled23process/browser gates. Prepared artifactrunner now tests compiledresolver invalidpreferred/symlink and modernrecovery zeroeffects plus bothprocesssuites. No packagingmetadata changed yet.
+
+Caller correction frozen for NARROW REREVIEW: manifest now21entries. Only runtime changes since SOURCECLEAR are sharedServer.ts extracted public preflight guards, main.ts invoking them before persisted/hydration/appServer-dispose/reinstall/update staging, sharedReconnect.ts calling preflight before verify/rearm. Diagnostic error state still updates visibly; no recovery lifecycle/state staging occurs on modern refusal. Added selected/saved-modern generic+shared restart zero-subprocess tests and reconnect zero-check/verify/restart test. Fresh41caller/recovery cases PASS (/tmp/dionlabs-deck-20260928-layout-caller.log). Full check rerun queued /tmp/dionlabs-deck-20260928-layout-full-final.log. Resolver/CAS/bridge/probe/CLI/runtime identity files unchanged from scopedCLEAR; currentisolated6/6 evidence remains applicable. Please narrowly recheck ordering before artifact publication. Alpha9 slot acknowledged.
+
+Caller-corrected fullcheck PASS514/4defaultoptinskips38files, /tmp/dionlabs-deck-20260928-layout-full-final.log; isolatednestedCLI6/6PASS covers optins. All21frozenmanifesthashesmatch. Alpha9/build28 packaging started underresource lock, log /tmp/dionlabs-deck-20260928-alpha9-build.log. Release/README/native docs explicitly modernrecoveryunsupported beforeconnectionteardown/reinstall/restart, manualidlequit+verifiedlauncher route; olderon-disklauncherupgrade/removal continuity remainsmanualgate. Narrowcaller rereview stillpending; no publication until receipt andartifact/CI complete.
+
+ALPHA9 FINAL ARTIFACT PASS: ZIP SHA2567b28bc4dc3797e42e04ab56b5503178baa91a89d6bbf640e0d6cfdf0a4f69588. Extracted build28 exactversion/signature/plugin/hash +compiled modern/legacy/invalidpreferred/symlink/recoveryzeroeffects +23actualprocess (17config+6CAS) +existingconfigfault/CLI/HTTPprivacy/IPCUTF8EOF +browserkeyboard/heldSpace/cancellation/narrowreach allPASS. Log /tmp/dionlabs-deck-20260928-alpha9-artifact.log. Root narrowcallerCLEAR70ecf3a/all21hashes +independent41tests; PR25attached. InitialCIbridge59s/Marketplace27s passed. Finalnotes/evidence-only commit follows; runtime unchanged, finalCI thenmerge/publication.

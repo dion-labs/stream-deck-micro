@@ -1,9 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-const m = vi.hoisted(() => ({ exists: vi.fn(), mkdir: vi.fn(), write: vi.fn(), read: vi.fn(), load: vi.fn(), create: vi.fn(), shared: vi.fn(), ensure: vi.fn(), service: vi.fn(), auto: vi.fn() }));
+const m = vi.hoisted(() => ({ exists: vi.fn(), mkdir: vi.fn(), write: vi.fn(), read: vi.fn(), load: vi.fn(), create: vi.fn(), shared: vi.fn(), ensure: vi.fn(), service: vi.fn(), auto: vi.fn(), enable: vi.fn() }));
 vi.mock('node:fs', () => ({ existsSync: m.exists, mkdirSync: m.mkdir, writeFileSync: m.write }));
 vi.mock('node:os', () => ({ homedir: () => '/demo' }));
 vi.mock('./config.js', () => ({ APP_DIR: '/demo/.stream-deck-micro', loadConfig: m.load, createConfigIfAbsent: m.create }));
 vi.mock('./sharedRuntime.js', () => ({ readSharedInstall: m.read, SHARED_INSTALL_STATE: '/demo/shared.json' }));
+vi.mock('./sharedInstall.js', () => ({ enableSharedAutoconnect: m.enable }));
 vi.mock('./sharedServer.js', () => ({ installSharedServer: m.shared }));
 vi.mock('./marketplaceService.js', () => ({ ensureMarketplaceService: m.ensure, installMarketplaceService: m.service }));
 vi.mock('./desktopAutoconnect.js', () => ({ installDesktopAutoconnect: m.auto }));
@@ -22,7 +23,7 @@ it('installs the bridge CLI, not the launcher CLI, after verified setup', async 
   m.read.mockReturnValueOnce(null).mockReturnValue({ configPath, fingerprint: 'verified' });
   await setupNativeApp(); expect(m.shared).toHaveBeenCalledWith(configPath);
   expect(m.service).toHaveBeenCalledWith(configPath, expect.stringMatching(/\/cli\/stream-deck-micro\.js$/));
-  expect(m.auto).toHaveBeenCalledOnce(); expect(m.write.mock.calls[0][1]).toContain('"autoConnect": true');
+  expect(m.auto).toHaveBeenCalledOnce(); expect(m.enable).toHaveBeenCalledOnce();
 });
 it('does not install a service if compatibility verification fails', async () => {
   m.shared.mockRejectedValue(new Error('unsupported Codex'));

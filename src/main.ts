@@ -44,6 +44,8 @@ import {
   installSharedServer,
   restartSharedCodexDesktop,
   assertSharedLaunchCompatible,
+  assertDesktopRecoverySupported,
+  assertPrivateRecoverySupported,
   sharedLaunchNeedsVerification,
   DEFAULT_SHARED_SERVER_URL,
   type DesktopConnectionStatus,
@@ -635,6 +637,12 @@ export async function runDaemon(
     if (privateRecoveryPromise) return privateRecoveryPromise;
     if (privateRecoveryComplete) return Promise.resolve();
     if (!sharedEndpoint) return Promise.reject(new Error('No shared Codex endpoint is configured'));
+    try { assertPrivateRecoverySupported(); }
+    catch (error) {
+      privateRecoveryError = error instanceof Error ? error.message : String(error);
+      syncDesktopRecoverySurface();
+      return Promise.reject(error);
+    }
     if (stateHydrated) persistState();
     persisted = loadState() ?? persisted;
     stateHydrated = false;
@@ -704,6 +712,12 @@ export async function runDaemon(
     if (!sharedEndpoint || (!sharedVerificationRequired && !reconnect)) {
       return Promise.reject(new Error('The installed Codex Desktop build does not require verification'));
     }
+    try { assertDesktopRecoverySupported(); }
+    catch (error) {
+      reconnectError = error instanceof Error ? error.message : String(error);
+      syncDesktopRecoverySurface();
+      return Promise.reject(error);
+    }
     sharedVerifying = true;
     reconnectError = null;
     privateRecoveryComplete = false;
@@ -748,6 +762,12 @@ export async function runDaemon(
     if (desktopRestartPromise) return desktopRestartPromise;
     if (!sharedEndpoint || !serverVersions || !needsServerUpdate()) {
       return Promise.reject(new Error('The managed shared server does not need an update'));
+    }
+    try { assertDesktopRecoverySupported(); }
+    catch (error) {
+      serverUpdateError = error instanceof Error ? error.message : String(error);
+      syncDesktopRecoverySurface();
+      return Promise.reject(error);
     }
     // Compatibility is checked before quitting Desktop or changing bindings.
     return assertSharedLaunchCompatible(sharedEndpoint).then(() => performServerUpdate());

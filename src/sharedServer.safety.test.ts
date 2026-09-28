@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   fingerprint: 'a'.repeat(64),
   runtime: null as any,
   exec: vi.fn(),
+  binary: '/Applications/ChatGPT.app/Contents/Resources/codex',
 }));
 vi.mock('node:child_process', async (original) => ({ ...(await original<typeof import('node:child_process')>()), execFile: mocks.exec }));
 vi.mock('./sharedRuntime.js', async (original) => ({
@@ -13,8 +14,11 @@ vi.mock('./sharedRuntime.js', async (original) => ({
   readSharedRuntime: () => mocks.runtime,
   desktopBuildFingerprint: async () => mocks.fingerprint,
 }));
+vi.mock('./desktopExecutable.js', async original => ({ ...(await original<typeof import('./desktopExecutable.js')>()), resolveDesktopExecutable: () => mocks.binary }));
 import {
   assertSharedLaunchCompatible,
+  assertDesktopRecoverySupported,
+  restartCodexDesktop,
   restartSharedCodexDesktop,
   sharedDesktopOpenArguments,
   sharedLaunchNeedsVerification,
@@ -22,12 +26,22 @@ import {
 
 beforeEach(() => {
   mocks.exec.mockReset();
-  mocks.install = { url: 'ws://127.0.0.1:17532', fingerprint: 'a'.repeat(64) };
+  mocks.install = { codexPath: '/Applications/ChatGPT.app/Contents/Resources/codex', url: 'ws://127.0.0.1:17532', fingerprint: 'a'.repeat(64) };
   mocks.fingerprint = 'a'.repeat(64);
   mocks.runtime = null;
+  mocks.binary = '/Applications/ChatGPT.app/Contents/Resources/codex';
 });
 
 describe('shared activation safety boundary', () => {
+  it.each(['selected', 'saved'])('rejects a modern %s layout before generic or shared restart effects', async source => {
+    const modern = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
+    if (source === 'saved') mocks.install.codexPath = modern;
+    else mocks.binary = modern;
+    expect(() => assertDesktopRecoverySupported()).toThrow('Modern Desktop recovery');
+    await expect(restartCodexDesktop()).rejects.toThrow('Modern Desktop recovery');
+    await expect(restartSharedCodexDesktop('ws://127.0.0.1:17532')).rejects.toThrow('Modern Desktop recovery');
+    expect(mocks.exec).not.toHaveBeenCalled();
+  });
   it('does not quit or reopen Desktop when setup was removed', async () => {
     mocks.install = null;
     await expect(restartSharedCodexDesktop('ws://127.0.0.1:17532')).rejects.toThrow('not installed');

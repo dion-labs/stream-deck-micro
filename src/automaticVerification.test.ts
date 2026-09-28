@@ -6,11 +6,15 @@ const install: DesktopSharedInstall = {
   launcherPath: '/test/launcher', fingerprint: 'old', version: 'old', token: 'test', autoConnect: true,
 };
 function fixture() {
-  return {
+  const deps = {
     fingerprint: vi.fn(async () => 'new'),
     verify: vi.fn(async () => ({ version: 'new', checks: ['passed'] })),
     readInstall: vi.fn((): DesktopSharedInstall | null => ({ ...install })), save: vi.fn(), wait: vi.fn(async (_ms: number, _signal?: AbortSignal) => {}),
+    resolveBinary: vi.fn(() => install.codexPath),
   };
+  return { ...deps, updateInstall: (update: (current: DesktopSharedInstall | null) => DesktopSharedInstall | null) => {
+    const value = update(deps.readInstall()); deps.save(value); return value;
+  } };
 }
 it('retries a transient failure before saving a successfully checked build', async () => {
   const deps = fixture(); deps.verify.mockRejectedValueOnce(new Error('ECONNRESET'));
@@ -38,10 +42,14 @@ it('rechecks an update that changes while the probe runs', async () => {
   expect(deps.verify).toHaveBeenCalledTimes(2);
   expect(deps.save).toHaveBeenCalledExactlyOnceWith({ ...install, fingerprint: 'new', version: 'new', verificationGeneration: expect.any(String) });
 });
-it.each(['removed', 'reinstalled', 'disabled', 'verified-elsewhere'])('does not overwrite an installation that was %s during verification', async (change) => {
+it.each(['removed', 'reinstalled', 'disabled', 'verified-elsewhere', 'generation-changed', 'executable-changed'])('does not overwrite an installation that was %s during verification', async (change) => {
   const deps = fixture();
   deps.readInstall.mockImplementation(() => change === 'removed' ? null : {
-    ...install, ...(change === 'reinstalled' ? { token: 'other' } : change === 'disabled' ? { autoConnect: false } : { fingerprint: 'other' }),
+    ...install, ...(change === 'reinstalled' ? { token: 'other' }
+      : change === 'disabled' ? { autoConnect: false }
+      : change === 'generation-changed' ? { verificationGeneration: 'newer-verification' }
+      : change === 'executable-changed' ? { codexPath: '/test/other-codex' }
+      : { fingerprint: 'other' }),
   });
   await expect(verifyAutomaticDesktop(install, deps)).rejects.toThrow('installation changed');
   expect(deps.save).not.toHaveBeenCalled();
@@ -56,4 +64,29 @@ it('does not start a probe after cancellation', async () => {
   const deps = fixture();
   await expect(verifyAutomaticDesktop(install, { ...deps, signal: AbortSignal.abort() })).rejects.toThrow();
   expect(deps.verify).not.toHaveBeenCalled();
+});
+
+it('migrates a legacy record only after probing and hashing the same selected executable', async () => {
+  const deps = fixture(); deps.resolveBinary.mockReturnValue('/test/modern-codex');
+  await verifyAutomaticDesktop(install, deps);
+  expect(deps.verify).toHaveBeenCalledExactlyOnceWith('/test/modern-codex');
+  expect(deps.fingerprint.mock.calls).toEqual([
+    [['/test/modern-codex', '/Applications/ChatGPT.app/Contents/Resources/app.asar']],
+    [['/test/modern-codex', '/Applications/ChatGPT.app/Contents/Resources/app.asar']],
+  ]);
+  expect(deps.save).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ codexPath: '/test/modern-codex', fingerprint: 'new' }));
+});
+
+it('does not save approval when layout selection keeps changing during each probe', async () => {
+  const deps = fixture(); let calls = 0;
+  deps.resolveBinary.mockImplementation(() => ++calls % 2 ? '/test/one' : '/test/two');
+  await expect(verifyAutomaticDesktop(install, deps)).rejects.toThrow('Desktop changed');
+  expect(deps.save).not.toHaveBeenCalled();
+});
+
+it('compares the generation inside the final update callback, not before entering it', async () => {
+  const deps = fixture();
+  deps.updateInstall = update => update({ ...install, verificationGeneration: 'won-before-lock' });
+  await expect(verifyAutomaticDesktop(install, deps)).rejects.toThrow('installation changed');
+  expect(deps.save).not.toHaveBeenCalled();
 });

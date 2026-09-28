@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APP_DIR, createConfigIfAbsent, loadConfig } from './config.js';
-import { readSharedInstall, SHARED_INSTALL_STATE } from './sharedRuntime.js';
+import { readSharedInstall } from './sharedRuntime.js';
+import { enableSharedAutoconnect } from './sharedInstall.js';
 import { installSharedServer } from './sharedServer.js';
 import { ensureMarketplaceService, installMarketplaceService } from './marketplaceService.js';
 import { installDesktopAutoconnect } from './desktopAutoconnect.js';
@@ -27,9 +28,7 @@ export async function setupNativeApp(): Promise<void> {
     throw new Error('An existing custom configuration needs manual setup; it was left unchanged.');
   }
   if (!existing) await installSharedServer(configPath);
-  const install = readSharedInstall();
-  if (!install) throw new Error('Shared setup could not be read');
-  writeFileSync(SHARED_INSTALL_STATE, `${JSON.stringify({ ...install, autoConnect: true }, null, 2)}\n`, { mode: 0o600 });
+  enableSharedAutoconnect();
   await installMarketplaceService(configPath, fileURLToPath(new URL('./cli/stream-deck-micro.js', import.meta.url)));
   installDesktopAutoconnect();
 }

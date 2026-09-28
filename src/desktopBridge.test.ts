@@ -65,7 +65,7 @@ describe('Desktop-owned shared startup', () => {
     const frames: string[] = []; output.on('data', (chunk) => frames.push(chunk.toString()));
     const launches: unknown[] = []; const records: unknown[] = [];
     input.end('{"id":1,"method":"initialize"}\n');
-    const result = await runDesktopBridge({ args, input, output, diagnostics, install,
+    const result = await runDesktopBridge({ binary: install.codexPath, args, input, output, diagnostics, install,
       fingerprint: async () => 'changed', env: { CODEX_APP_SERVER_WS_URL: install.url, KEEP: 'yes' },
       record: (value) => records.push(value),
       launch: (binary, actualArgs, env, shared) => {
@@ -74,7 +74,7 @@ describe('Desktop-owned shared startup', () => {
       },
     });
     expect(result).toBe(0);
-    expect(launches).toEqual([{ binary: '/Applications/ChatGPT.app/Contents/Resources/codex', actualArgs: args,
+    expect(launches).toEqual([{ binary: install.codexPath, actualArgs: args,
       env: { KEEP: 'yes' }, shared: false }]);
     expect(frames.join('')).toBe('{"id":1,"method":"initialize"}\n');
     expect(records.at(-1)).toMatchObject({ mode: 'private', reason: expect.stringContaining('build changed') });
@@ -85,7 +85,7 @@ describe('Desktop-owned shared startup', () => {
     const output = new PassThrough(); const chunks: string[] = [];
     output.on('data', (chunk) => chunks.push(chunk.toString()));
     const launches: boolean[] = [];
-    const code = await runDesktopBridge({ args, input, output, diagnostics: new PassThrough(), install,
+    const code = await runDesktopBridge({ binary: install.codexPath, args, input, output, diagnostics: new PassThrough(), install,
       fingerprint: async () => install.fingerprint, record: () => {}, startupTimeoutMs: 500,
       launch: (_binary, _args, _env, shared) => {
         launches.push(shared);
@@ -127,7 +127,7 @@ describe('Desktop-owned shared startup', () => {
         } else if(m.id === 'callback-7') socket.send(JSON.stringify({method:'test/completed',params:m.result}));
       }));
     `;
-    const running = runDesktopBridge({ args, input, output, diagnostics: new PassThrough(),
+    const running = runDesktopBridge({ binary: install.codexPath, args, input, output, diagnostics: new PassThrough(),
       install: { ...install, url: endpoint }, fingerprint: async () => install.fingerprint,
       signal: controller.signal,
       record: (record) => records.push(record), startupTimeoutMs: 3000,
@@ -164,7 +164,7 @@ describe('Desktop-owned shared startup', () => {
   it.each(['fingerprint', 'startup'])('does not launch a fallback child or trip the circuit when closed during %s', async (phase) => {
     const controller = new AbortController();
     const launches: boolean[] = []; const records: unknown[] = [];
-    const result = await runDesktopBridge({ args, install, input: new PassThrough(), output: new PassThrough(),
+    const result = await runDesktopBridge({ binary: install.codexPath, args, install, input: new PassThrough(), output: new PassThrough(),
       diagnostics: new PassThrough(), signal: controller.signal, record: (value) => records.push(value),
       fingerprint: async () => {
         if (phase === 'fingerprint') controller.abort();
@@ -190,7 +190,7 @@ describe('automatic verification recovery', () => {
     input.end('{"method":"initialize","id":1}\n');
     const launches: boolean[] = []; const records: Record<string, unknown>[] = [];
     let verifications = 0;
-    const result = await runDesktopBridge({
+    const result = await runDesktopBridge({ binary: install.codexPath,
       args, input, output, diagnostics: new PassThrough(), install: { ...install, autoConnect: true, verificationGeneration: mode === 'reverified' ? 'new-verification' : undefined },
       fingerprint: async () => install.fingerprint,
       priorRuntime: { fingerprint: install.fingerprint, mode: mode === 'reverified' ? 'blocked' : mode === 'startup-exit' ? 'private' : mode, reason: mode === 'startup-exit' ? 'shared server exited during startup' : 'ECONNRESET' },
@@ -212,7 +212,7 @@ describe('automatic verification recovery', () => {
     const input = new PassThrough(); const output = new PassThrough(); const launches: boolean[] = [];
     const chunks: string[] = []; output.on('data', (chunk) => chunks.push(String(chunk)));
     input.end('{"method":"initialize","id":1}\n');
-    await runDesktopBridge({
+    await runDesktopBridge({ binary: install.codexPath,
       args, input, output, diagnostics: new PassThrough(), install: { ...install, autoConnect: true },
       fingerprint: async () => 'changed', record: () => {},
       automaticVerify: async () => { throw new Error('Compatibility assertion failed'); },
@@ -226,7 +226,7 @@ describe('automatic verification recovery', () => {
 
   it('cancels verification without launching a backend when Desktop closes', async () => {
     const controller = new AbortController(); let launched = false;
-    const result = await runDesktopBridge({
+    const result = await runDesktopBridge({ binary: install.codexPath,
       args, input: new PassThrough(), output: new PassThrough(), diagnostics: new PassThrough(),
       install: { ...install, autoConnect: true }, fingerprint: async () => 'changed',
       record: () => {}, signal: controller.signal,
@@ -238,4 +238,33 @@ describe('automatic verification recovery', () => {
     });
     expect(result).toBe(0); expect(launched).toBe(false);
   });
+});
+
+describe('selected executable approval boundary', () => {
+  it.each(['different-path', 'changed-token', 'changed-generation', 'changed-selection', 'bad-migration'])
+    ('keeps %s private without forwarding to a shared child', async condition => {
+      const input = new PassThrough(); input.end('{"id":1,"method":"initialize"}\n');
+      const output = new PassThrough(); const chunks: string[] = [];
+      output.on('data', chunk => chunks.push(String(chunk)));
+      const launches: boolean[] = [];
+      let selections = 0;
+      const binary = condition === 'different-path' || condition === 'bad-migration' ? '/bundle/modern' : install.codexPath;
+      await runDesktopBridge({ args, binary, input, output, diagnostics: new PassThrough(),
+        install: { ...install, autoConnect: condition === 'bad-migration' },
+        fingerprint: async () => install.fingerprint,
+        resolveBinary: () => condition === 'changed-selection' && ++selections > 1 ? '/bundle/updated' : binary,
+        readInstall: () => ({ ...install,
+          ...(condition === 'changed-token' ? { token: 'changed' } : {}),
+          ...(condition === 'changed-generation' ? { verificationGeneration: 'newer' } : {}),
+        }),
+        automaticVerify: async () => install.fingerprint,
+        record: () => {},
+        launch: (_binary, _args, _env, shared) => {
+          launches.push(shared);
+          return spawn(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)']);
+        },
+      });
+      expect(launches).toEqual([false]);
+      expect(chunks.join('')).toBe('{"id":1,"method":"initialize"}\n');
+    });
 });

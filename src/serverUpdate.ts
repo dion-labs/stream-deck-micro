@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { RpcConnection } from './harness/codex-app-server/rpc.js';
-import { DESKTOP_CODEX, isManagedDesktopServer } from './sharedServer.js';
+import { isManagedDesktopServer } from './sharedServer.js';
+import { resolveDesktopExecutable } from './desktopExecutable.js';
 
 export interface ServerVersionStatus {
   state: 'unknown' | 'current' | 'update-required';
@@ -34,7 +35,9 @@ export const serverVersionSource: ServerVersionSource = {
     }
   },
   bundled: () => new Promise((resolve) => {
-    execFile(DESKTOP_CODEX, ['--version'], { timeout: 3000 }, (error, stdout) => {
+    let binary: string;
+    try { binary = resolveDesktopExecutable(); } catch { resolve(null); return; }
+    execFile(binary, ['--version'], { timeout: 3000 }, (error, stdout) => {
       resolve(error ? null : parseCodexVersion(stdout.trim()));
     });
   }),
