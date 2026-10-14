@@ -338,7 +338,7 @@ export async function openSharedCodexDesktop(): Promise<void> {
 
 export function sharedDesktopOpenArguments(): string[] {
   return ['-a', 'ChatGPT', '--env', `CODEX_CLI_PATH=${DESKTOP_LAUNCHER}`,
-    '--env', 'CODEX_APP_SERVER_WS_URL=', '--env', 'CODEX_APP_SERVER_FORCE_CLI=1'];
+    '--env', 'CODEX_APP_SERVER_FORCE_CLI=0'];
 }
 
 export async function restartSharedCodexDesktop(endpoint: string): Promise<void> {

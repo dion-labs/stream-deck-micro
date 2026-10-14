@@ -119,6 +119,10 @@ const checked = new AutomaticRecovery('ws://local', {
 await checked.tick(false);
 assert.equal(checked.status.state,'verified');assert.match(checked.status.message,/not connected/);
 console.log('Extracted startup flags and truthful disconnected status passed');
+const {sharedDesktopOpenArguments} = await import(pathToFileURL(runtime + '/dist/sharedServer.js'));
+assert.ok(sharedDesktopOpenArguments().includes('CODEX_APP_SERVER_FORCE_CLI=0'));
+assert.ok(!sharedDesktopOpenArguments().some(arg=>arg.startsWith('CODEX_APP_SERVER_WS_URL=')));
+
 
 const ipcPath = join(process.env.TMPDIR, 'i.sock');
 await serveIpc(ipcPath, (_cmd, args) => args);

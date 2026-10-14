@@ -15,7 +15,9 @@ export const LAUNCHER_APP = join(homedir(), 'Applications', 'Codex + Stream Deck
 export function applyDesktopAutoconnect(openAtLogin = false): 'configured' | 'already-running' | 'opened' {
   if (!readSharedInstall()) throw new Error('Install shared control before enabling automatic connection');
   execFileSync('/bin/launchctl', ['setenv', 'CODEX_CLI_PATH', DESKTOP_LAUNCHER]);
-  execFileSync('/bin/launchctl', ['setenv', 'CODEX_APP_SERVER_FORCE_CLI', '1']);
+  // FORCE_CLI=1 overrides every host, including Desktop's durable/cloud routing.
+  // Explicit zero also clears the legacy value without restarting Desktop.
+  execFileSync('/bin/launchctl', ['setenv', 'CODEX_APP_SERVER_FORCE_CLI', '0']);
   if (!openAtLogin) return 'configured';
   // A login restore may already own a backend. Opening again cannot change its
   // environment; never attempt to fix that by quitting or restarting it.
