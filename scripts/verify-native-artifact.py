@@ -96,6 +96,16 @@ await assert.rejects(recoverPrivateCodex(undefined, 'ws://127.0.0.1:17532', {
 }), /Modern Desktop recovery is not supported/);
 assert.deepEqual(recoveryCalls, []);
 console.log('Extracted bundled runtime: modern/legacy resolver, invalid preferred path, symlink rejection and zero-effect modern recovery passed');
+const {AutomaticRecovery} = await import(pathToFileURL(runtime + '/dist/automaticRecovery.js'));
+let checks=0, clock=0;
+const recovery = new AutomaticRecovery('ws://local', {
+ install:()=>({autoConnect:true,url:'ws://local',fingerprint:'old'}),runtime:()=>null,
+ fingerprint:async()=>'new',verify:async()=>{checks++;throw new Error('ECONNRESET');},now:()=>clock
+});
+for(let i=0;i<5;i++){await recovery.tick(false);clock+=120000;}
+assert.equal(checks,3);assert.equal(recovery.status.state,'blocked');
+recovery.stop();
+console.log('Extracted automatic recovery: bounded failures and intervention status passed');
 const ipcPath = join(process.env.TMPDIR, 'i.sock');
 await serveIpc(ipcPath, (_cmd, args) => args);
 const unicode = 'caffè 👩‍💻 漢字';

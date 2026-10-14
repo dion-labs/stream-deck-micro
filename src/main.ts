@@ -1,3 +1,4 @@
+import { AutomaticRecovery } from './automaticRecovery.js';
 import { reconnectSharedDesktop } from './sharedReconnect.js';
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -155,6 +156,7 @@ export async function runDaemon(
   const surfaceMode = options.surfaceMode ?? config.surface.mode;
   // Missing/removed shared setup must never create a Micro-owned backend.
   const sharedEndpoint = config.appServer.url ?? DEFAULT_SHARED_SERVER_URL;
+  const automaticRecovery = new AutomaticRecovery(sharedEndpoint);
   const adapter = new AppServerAdapter({
     approvalPolicy: config.codex.approvalPolicy,
     sandbox: config.codex.sandboxMode,
@@ -290,6 +292,7 @@ export async function runDaemon(
       desktop: {
         ...desktopConnection,
         sessionsReady: stateHydrated,
+        automaticRecovery: automaticRecovery.status,
         restoreError,
         serverVersions: serverVersions?.status ?? null,
         serverUpdating,
@@ -607,6 +610,9 @@ export async function runDaemon(
       log(`desktop shared control → ${next.state}`);
     }
     desktopConnection = next;
+    if (!sharedVerifying && !desktopRestartPromise && !privateRecoveryPromise && !privateRecoveryComplete) {
+      void automaticRecovery.tick(next.state === 'connected');
+    }
     try {
       await serverVersions?.refresh();
       if (next.state === 'connected' && !needsServerUpdate()) await ensureSessionsHydrated();
@@ -1138,6 +1144,7 @@ export async function runDaemon(
   }
 
   const shutdown = () => {
+    automaticRecovery.stop();
     if (desktopPoll) clearInterval(desktopPoll);
     unreadMonitor?.close();
     desktopFocusMonitor?.close();

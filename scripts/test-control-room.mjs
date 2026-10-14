@@ -109,6 +109,15 @@ try {
   await retry.press('Enter');
   await page.getByText('Synthetic action failure', { exact: true }).waitFor();
   assert.deepEqual(mutations.map(value => value.cmd), ['stop', 'desktop.restart']);
+  status.desktop = { state: 'restart-required', sessionsReady: false,
+    automaticRecovery: { state: 'checking', message: 'Checking compatibility automatically. Existing sessions remain running.' } };
+  await page.reload();
+  await page.getByText('Connecting automatically', {exact:true}).waitFor();
+  assert.match(await page.locator('#desktopBannerMessage').innerText(), /Existing sessions remain running/);
+  status.desktop.automaticRecovery = {state:'ready',message:'Compatibility verified for the next launch.'};
+  await page.reload();
+  await page.getByText('Ready for the next Codex launch', {exact:true}).waitFor();
+  assert.deepEqual(mutations.map(value => value.cmd), ['stop', 'desktop.restart'], 'Displaying recovery must never dispatch a restart');
   assert.deepEqual(errors, [], 'No browser runtime exceptions');
   console.log('Control Room browser checks passed: 15 named buttons, Tab/Enter/Space, visible focus retained through polling, held Space survives polling; blur/capability/assignment changes cancel, configure safety, armed single STOP/error, reload disarm, navigation-only disable, 390px scroll reach, recovery button gating, no page errors');
 } finally {
