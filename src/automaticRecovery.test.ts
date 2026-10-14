@@ -11,7 +11,7 @@ function fixture() {
 it('prepares a changed build without any Desktop lifecycle dependency, once per identity', async () => {
   const {deps,recovery,advance} = fixture();
   await recovery.tick(false); advance(); await recovery.tick(false);
-  expect(deps.verify).toHaveBeenCalledOnce(); expect(recovery.status.state).toBe('ready');
+  expect(deps.verify).toHaveBeenCalledOnce(); expect(recovery.status.state).toBe('verified');
   deps.fingerprint.mockResolvedValue('newer'); advance(); await recovery.tick(false);
   expect(deps.verify).toHaveBeenCalledTimes(2);
 });
@@ -47,4 +47,10 @@ it('reverifies transient private failure but leaves permanent failure for interv
   await recovery.tick(false); expect(recovery.status.state).toBe('blocked'); expect(deps.verify).not.toHaveBeenCalled();
   deps.runtime.mockReturnValue({url:'ws://local',mode:'private',fingerprint:'old',verificationGeneration:'g1',reason:'ECONNRESET'} as DesktopSharedRuntime);
   advance(); await recovery.tick(false); expect(deps.verify).toHaveBeenCalledOnce();
+});
+
+it('does not present a matching saved fingerprint as a live connection', async () => {
+ const {deps,recovery}=fixture(); deps.fingerprint.mockResolvedValue('old');
+ await recovery.tick(false); expect(deps.verify).not.toHaveBeenCalled();
+ expect(recovery.status.state).toBe('verified'); expect(recovery.status.message).toContain('not connected');
 });

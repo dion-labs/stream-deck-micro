@@ -1062,7 +1062,7 @@ function renderDesktopConnection(status) {
   var recovery = desktop.automaticRecovery;
   if (recovery && recovery.message && !desktop.restoreError && !desktop.serverUpdating && desktop.state !== 'connected') {
     banner.classList.toggle('error', recovery.state === 'blocked');
-    $('desktopBannerTitle').textContent = recovery.state === 'ready' ? 'Ready for the next Codex launch' : recovery.state === 'blocked' ? 'Connection needs attention' : 'Connecting automatically';
+    $('desktopBannerTitle').textContent = recovery.state === 'verified' ? 'Compatibility checked — not connected' : recovery.state === 'blocked' ? 'Connection needs attention' : 'Connecting automatically';
     $('desktopBannerMessage').textContent = recovery.message;
     return;
   }

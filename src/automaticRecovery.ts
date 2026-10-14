@@ -54,13 +54,13 @@ export class AutomaticRecovery {
           && runtime.fingerprint === fingerprint && runtime.verificationGeneration === install.verificationGeneration) {
           this.status = { state: 'blocked', message: 'Shared startup needs attention: ' + (runtime.reason ?? 'Compatibility must be verified manually.') }; return;
         }
-        this.status = { state: 'ready', message: 'Shared control is prepared. Existing Codex sessions are left running; use Codex + Stream Deck on the next launch.' }; return;
+        this.status = { state: 'verified', message: 'Compatibility check passed, but shared control is not connected. Existing sessions remain running. Connection can only be confirmed after Codex joins the shared backend on a future launch.' }; return;
       }
       this.attempts++;
       this.status = { state: 'checking', message: 'Checking compatibility automatically. Existing Codex sessions remain running.' };
       await this.deps.verify(install, { signal: this.abort.signal });
       this.finished = true;
-      this.status = { state: 'ready', message: 'Compatibility verified for the next launch. Existing Codex sessions were left running.' };
+      this.status = { state: 'verified', message: 'Compatibility check passed, but shared control is not connected. Existing sessions remain running. Connection can only be confirmed after Codex joins the shared backend on a future launch.' };
     } catch (error) {
       if (this.abort.signal.aborted) return;
       const retry = isTransientVerificationFailure(error) && this.attempts < 3;
