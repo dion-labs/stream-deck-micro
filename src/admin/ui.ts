@@ -1059,6 +1059,13 @@ function renderDesktopConnection(status) {
     return;
   }
   banner.hidden = false;
+  var recovery = desktop.automaticRecovery;
+  if (recovery && recovery.message && !desktop.restoreError && !desktop.serverUpdating && desktop.state !== 'connected') {
+    banner.classList.toggle('error', recovery.state === 'blocked');
+    $('desktopBannerTitle').textContent = recovery.state === 'ready' ? 'Ready for the next Codex launch' : recovery.state === 'blocked' ? 'Connection needs attention' : 'Connecting automatically';
+    $('desktopBannerMessage').textContent = recovery.message;
+    return;
+  }
   if (updateNeeded || desktop.serverUpdating) {
     banner.classList.toggle('error', !desktop.serverUpdating);
     $('desktopBannerTitle').textContent = desktop.serverUpdating ? 'Updating shared Codex backend' : 'Update shared Codex backend';

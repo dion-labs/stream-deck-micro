@@ -97,7 +97,7 @@ describe('Desktop-owned shared startup', () => {
     expect(chunks.join('')).toBe('{"method":"initialize","id":1}\n');
   });
 
-  it.each(['EOF', 'signal'])('relays both RPC directions unchanged and shuts down cleanly on %s', async (shutdown) => {
+  it.each(['EOF', 'signal', 'retry'])('relays both RPC directions unchanged and shuts down cleanly on %s', async (shutdown) => {
     const reservation = createServer();
     await new Promise<void>((resolve) => reservation.listen(0, '127.0.0.1', resolve));
     const port = (reservation.address() as { port: number }).port;
@@ -128,11 +128,12 @@ describe('Desktop-owned shared startup', () => {
       }));
     `;
     const running = runDesktopBridge({ binary: install.codexPath, args, input, output, diagnostics: new PassThrough(),
-      install: { ...install, url: endpoint }, fingerprint: async () => install.fingerprint,
+      install: { ...install, url: endpoint, autoConnect: true }, fingerprint: async () => install.fingerprint,
       signal: controller.signal,
       record: (record) => records.push(record), startupTimeoutMs: 3000,
       launch: (_binary, actualArgs, _env, shared) => {
         launches.push(shared);
+        if (shutdown === 'retry' && launches.length === 1) return spawn(process.execPath, ['-e', 'process.exit(2)']);
         return spawn(process.execPath, ['-e', script, '--', ...actualArgs], { stdio: 'pipe' });
       },
     });
@@ -150,7 +151,7 @@ describe('Desktop-owned shared startup', () => {
       expect(runtime.token).not.toBe(install.token);
       micro = new WebSocket(endpoint, { headers: { Authorization: `Bearer ${runtime.token}` } });
       await new Promise<void>((resolve, reject) => { micro!.once('open', resolve); micro!.once('error', reject); });
-      expect(launches).toEqual([true]);
+      expect(launches).toEqual(shutdown === 'retry' ? [true, true] : [true]);
     } finally {
       micro?.terminate();
       if (shutdown === 'signal') controller.abort();
@@ -203,7 +204,7 @@ describe('automatic verification recovery', () => {
     });
     expect(result).toBe(0);
     expect(verifications).toBe(mode === 'private' || mode === 'startup-exit' ? 1 : 0);
-    expect(launches).toEqual(mode === 'blocked' ? [false] : [true, false]);
+    expect(launches).toEqual(mode === 'blocked' ? [false] : [true, true, true, false]);
     expect(chunks.join('')).toBe('{"method":"initialize","id":1}\n');
     if (mode === 'blocked') expect(records.at(-1)?.mode).toBe('blocked');
   });
@@ -267,4 +268,22 @@ describe('selected executable approval boundary', () => {
       expect(launches).toEqual([false]);
       expect(chunks.join('')).toBe('{"id":1,"method":"initialize"}\n');
     });
+});
+
+it('never retries or falls back after forwarding even with automatic connection enabled', async () => {
+  const reservation = createServer();
+  await new Promise<void>(resolve => reservation.listen(0, '127.0.0.1', resolve));
+  const port = (reservation.address() as { port: number }).port;
+  await new Promise<void>(resolve => reservation.close(() => resolve()));
+  const input = new PassThrough(); input.write('{"method":"initialize","id":1}\n');
+  const launches: boolean[] = []; const records: Record<string, unknown>[] = [];
+  const code = await runDesktopBridge({binary: install.codexPath,args,input,output:new PassThrough(),diagnostics:new PassThrough(),
+    install:{...install,autoConnect:true,url:`ws://127.0.0.1:${port}`},fingerprint:async()=>install.fingerprint,
+    record:value=>records.push(value),startupTimeoutMs:2000,
+    launch:(_binary,_args,_env,shared)=>{
+      launches.push(shared);
+      return spawn(process.execPath,['-e',`const {WebSocketServer}=require('ws');
+        new WebSocketServer({host:'127.0.0.1',port:${port}}).on('connection',s=>s.once('message',()=>s.close()));`],{stdio:'pipe'});
+    }});
+  expect(code).toBe(1); expect(launches).toEqual([true]); expect(records.at(-1)?.mode).toBe('blocked');
 });

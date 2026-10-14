@@ -157,18 +157,37 @@ export async function runDesktopBridge(options: DesktopBridgeOptions): Promise<n
       return await privateServer('Desktop executable or shared installation changed; compatibility verification required');
     }
     const tokenHash = createHash('sha256').update(token).digest('hex');
-    child = launch(binary, [...sharedArgs, '--ws-auth', 'capability-token', '--ws-token-sha256', tokenHash], env, true);
-    // Keep diagnostics on stderr; stdout is exclusively Desktop's RPC stream.
-    child.stderr!.pipe(diagnostics, { end: false });
-    let startupError: Error | null = null;
-    child.on('error', (error) => { startupError = error; });
-    const deadline = Date.now() + (options.startupTimeoutMs ?? 8000);
-    while (!socket) {
-      if (shutdownRequested) throw new Error('Desktop closed during shared startup');
-      if (startupError || child.exitCode !== null || child.signalCode !== null) throw startupError ?? new Error('shared server exited during startup');
-      if (Date.now() >= deadline) throw new Error('shared startup timed out');
-      try { socket = await connectSocket(install.url, token); }
-      catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
+    for (let attempt = 0; ; attempt++) {
+      // Every retry precedes reading Desktop input. Never replay a forwarded RPC.
+      const current = readInstall();
+      if (shutdownRequested) return 0;
+      if (resolveBinary() !== binary || !current || current.token !== install.token
+        || current.url !== install.url || current.fingerprint !== fingerprint
+        || current.codexPath !== binary || current.verificationGeneration !== verificationGeneration) {
+        throw new Error('Shared installation changed during startup');
+      }
+      try {
+        child = launch(binary, [...sharedArgs, '--ws-auth', 'capability-token', '--ws-token-sha256', tokenHash], env, true);
+        // Keep diagnostics on stderr; stdout is exclusively Desktop's RPC stream.
+        child.stderr!.pipe(diagnostics, { end: false });
+        let startupError: Error | null = null;
+        child.on('error', (error) => { startupError = error; });
+        const deadline = Date.now() + (options.startupTimeoutMs ?? 8000);
+        while (!socket) {
+          if (shutdownRequested) throw new Error('Desktop closed during shared startup');
+          if (startupError || child.exitCode !== null || child.signalCode !== null) throw startupError ?? new Error('shared server exited during startup');
+          if (Date.now() >= deadline) throw new Error('shared startup timed out');
+          try { socket = await connectSocket(install.url, token); }
+          catch { await new Promise((resolve) => setTimeout(resolve, 100)); }
+        }
+        break;
+      } catch (error) {
+        await stopChild();
+        socket = null;
+        if (shutdownRequested || !install.autoConnect || attempt >= 2 || !isTransientVerificationFailure(error)) throw error;
+        diagnostics.write(`[micro] Retrying shared startup automatically (${attempt + 1}/2).\n`);
+        await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+      }
     }
     // Authentication ensures we cannot connect Desktop to an unrelated listener.
     // Do not mark connected until Desktop's own initialize response succeeds.

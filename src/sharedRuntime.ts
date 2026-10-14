@@ -25,6 +25,7 @@ export interface DesktopSharedInstall {
 }
 
 export interface DesktopSharedRuntime {
+  verificationGeneration?: string;
   mode: 'shared' | 'private' | 'blocked';
   bridgePid: number;
   serverPid?: number;
