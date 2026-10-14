@@ -25,7 +25,7 @@ it('enables future launches without opening or quitting the current app', () => 
   installDesktopAutoconnect();
   expect(mocks.exec.mock.calls).toEqual([
     ['/bin/launchctl', ['setenv', 'CODEX_CLI_PATH', DESKTOP_LAUNCHER]],
-    ['/bin/launchctl', ['setenv', 'CODEX_APP_SERVER_FORCE_CLI', '1']],
+    ['/bin/launchctl', ['setenv', 'CODEX_APP_SERVER_FORCE_CLI', '0']],
   ]);
   expect(mocks.write.mock.calls[0][1]).toContain('desktop-autoconnect.js');
   expect(mocks.write.mock.calls[0][1]).toContain('<key>RunAtLoad</key>');

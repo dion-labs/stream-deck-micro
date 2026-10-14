@@ -68,8 +68,8 @@ describe('shared activation safety boundary', () => {
   it('uses process-scoped CLI routing and explicitly clears inherited WS routing', () => {
     const args = sharedDesktopOpenArguments();
     expect(args).toContain('--env');
-    expect(args).toContain('CODEX_APP_SERVER_WS_URL=');
-    expect(args).toContain('CODEX_APP_SERVER_FORCE_CLI=1');
+    expect(args.some(value => value.startsWith('CODEX_APP_SERVER_WS_URL='))).toBe(false);
+    expect(args).toContain('CODEX_APP_SERVER_FORCE_CLI=0');
     expect(args.some((arg) => arg.startsWith('CODEX_CLI_PATH='))).toBe(true);
     expect(args.join(' ')).not.toContain('launchctl');
   });
