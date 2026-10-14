@@ -4,7 +4,7 @@
  * No Desktop process/pipe, production port, real auth, user history, or model turn.
  */
 import { createServer } from 'node:net';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { PassThrough, type Readable } from 'node:stream';
@@ -188,7 +188,7 @@ describe.skipIf(!binary)('real bundled App Server / isolated shared WS', () => {
     console.info('Compatibility verification:', JSON.stringify(result));
   }, TIMEOUT);
 
-  it('relays Desktop initialization and notifications through the real wrapper; Micro resumes the same durable task', async () => {
+  it.each(['legacy', 'plugins'])('relays %s Desktop startup through the real wrapper; Micro resumes the same durable task', async (contract) => {
     const state = probe();
     const version = await state.version(binary!);
     const endpoint = await unusedLoopbackEndpoint();
@@ -201,8 +201,18 @@ describe.skipIf(!binary)('real bundled App Server / isolated shared WS', () => {
     const fingerprint = 'f'.repeat(64);
     const sent = vi.spyOn(WebSocket.prototype, 'send');
     const desktop = new StdioPeer(output, (line) => { input.write(line); });
+    let launchArgs = state.launchArguments(true);
+    if (contract === 'plugins') {
+      // The observed argv has plugin enable flags, not an inline MCP base.
+      // Supply only our harmless MCP fixture through isolated config.toml.
+      const path = join(state.env.CODEX_HOME!, 'config.toml');
+      writeFileSync(path, launchArgs[1] + '\n' + readFileSync(path, 'utf8'));
+      launchArgs = ['-c', 'features.code_mode_host=true', 'app-server', '--analytics-default-enabled',
+        '-c', 'plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true',
+        '-c', 'plugins.code-review@openai-bundled.mcp_servers.code-review.enabled=true'];
+    }
     const bridge = runDesktopBridge({
-      args: state.launchArguments(true), binary: binary!, env: state.env,
+      args: launchArgs, binary: binary!, env: state.env,
       input, output, diagnostics, fingerprint: async () => fingerprint,
       install: {
         mode: 'desktop-launch', url: endpoint, codexPath: binary!,

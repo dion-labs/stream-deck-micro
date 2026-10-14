@@ -1,6 +1,6 @@
 # Native macOS preview
 
-[Download v0.2.0-alpha.10](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.10)
+[Download v0.2.0-alpha.11](https://github.com/dion-labs/stream-deck-micro/releases/tag/v0.2.0-alpha.11)
 
 Codex + Stream Deck brings the full local Control Center into a macOS window:
 Slots, Sessions, Keys, Library, Device, menu-bar status, and opt-in task notifications.
@@ -43,11 +43,24 @@ When convenient, finish active work, quit ChatGPT yourself, and open this launch
 Closing the Control Center window, or quitting this launcher, does not stop the
 background bridge or quit ChatGPT. Notifications are off until you enable them.
 
+## Connection status
+
+“Compatibility checked — not connected” means the isolated backend probe passed,
+but Desktop has not joined shared control. It is not proof that the next launch
+will connect. Active private sessions are left running. Full control requires a
+live shared connection and restored session bindings.
+
+The observed plugin-based startup flags and the older inline MCP configuration
+are supported. Unknown or contradictory launch contracts stay private. Testing
+uses disposable configuration and harmless MCP fixtures; real plugin/account
+behavior is confirmed only after a future natural Desktop launch.
+
 ## Recover after a Codex crash
 
 The newer nested `CodexCLI.app` layout supports verification and shared startup,
-but automatic recovery is unavailable in this preview. Recovery controls report
-that limitation before changing the connection or restarting Desktop. When work
+including automatic pre-request startup retries and isolated compatibility checks.
+Automatic Desktop restart remains unavailable for this layout; restart controls
+report that limitation before changing the connection. When work
 is idle, quit Desktop yourself and open the verified launcher. The automatic
 recovery steps below apply to the older bundled CLI layout.
 

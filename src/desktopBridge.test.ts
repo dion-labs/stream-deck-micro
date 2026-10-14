@@ -287,3 +287,21 @@ it('never retries or falls back after forwarding even with automatic connection 
     }});
   expect(code).toBe(1); expect(launches).toEqual([true]); expect(records.at(-1)?.mode).toBe('blocked');
 });
+
+const pluginArgs = ['-c', 'features.code_mode_host=true', 'app-server', '--analytics-default-enabled',
+  '-c', 'plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true',
+  '-c', 'plugins.code-review@openai-bundled.mcp_servers.code-review.enabled=true'];
+it('preserves the observed plugin-based Desktop contract and adds only the shared transport', () => {
+  expect(sharedServerArguments(pluginArgs, install.url)).toEqual([...pluginArgs, '--listen', install.url]);
+});
+it.each([
+  [...pluginArgs, '-c', 'plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=false'],
+  [...pluginArgs, '-c', 'features.code_mode_host=false'],
+  [...pluginArgs, '--disable', 'code_mode_host'],
+  [...pluginArgs, '--listen', 'stdio://'], [...pluginArgs, 'app-server'],
+  ['-c', 'app-server', '-c', 'mcp_servers.codex_app={}'],
+  ['app-server', '--enable', 'mcp_servers.codex_app={}'],
+  ['app-server', '-c', 'plugins.some-other-plugin.mcp_servers.codex_app.enabled=true'],
+])('leaves unsupported or contradictory startup flags private: %j', (...values) => {
+  expect(sharedServerArguments(values, install.url)).toBeNull();
+});

@@ -106,6 +106,20 @@ for(let i=0;i<5;i++){await recovery.tick(false);clock+=120000;}
 assert.equal(checks,3);assert.equal(recovery.status.state,'blocked');
 recovery.stop();
 console.log('Extracted automatic recovery: bounded failures and intervention status passed');
+const {sharedServerArguments} = await import(pathToFileURL(runtime + '/dist/desktopBridge.js'));
+const pluginArgs = ['-c','features.code_mode_host=true','app-server','--analytics-default-enabled',
+ '-c','plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled=true',
+ '-c','plugins.code-review@openai-bundled.mcp_servers.code-review.enabled=true'];
+assert.deepEqual(sharedServerArguments(pluginArgs,'ws://127.0.0.1:12345'),[...pluginArgs,'--listen','ws://127.0.0.1:12345']);
+assert.equal(sharedServerArguments([...pluginArgs,'--listen','stdio://'],'ws://127.0.0.1:12345'),null);
+const checked = new AutomaticRecovery('ws://local', {
+ install:()=>({autoConnect:true,url:'ws://local',fingerprint:'same'}),runtime:()=>null,
+ fingerprint:async()=>'same',verify:async()=>{throw new Error('unexpected probe');},now:()=>0
+});
+await checked.tick(false);
+assert.equal(checked.status.state,'verified');assert.match(checked.status.message,/not connected/);
+console.log('Extracted startup flags and truthful disconnected status passed');
+
 const ipcPath = join(process.env.TMPDIR, 'i.sock');
 await serveIpc(ipcPath, (_cmd, args) => args);
 const unicode = 'caffè 👩‍💻 漢字';

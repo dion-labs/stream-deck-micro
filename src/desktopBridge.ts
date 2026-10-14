@@ -13,20 +13,36 @@ import { resolveDesktopExecutable } from './desktopExecutable.js';
 
 /** Only intercept Desktop's local server, never CLI tools, code-mode hosts or subcommands. */
 export function sharedServerArguments(args: string[], endpoint: string): string[] | null {
-  const command = args.indexOf('app-server');
-  if (command < 0 || args.some((arg) => ['--help', '-h', '--version', '-V'].includes(arg))) return null;
-  // Recognize only the launch contract inspected and tested with this Desktop build.
+  let commands = 0;
+  const configs = new Map<string, string>();
+  // Parse option values separately: a value must never masquerade as a command
+  // or a Desktop marker. Preserve the original array verbatim for execution.
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === 'app-server' || arg === '--analytics-default-enabled') continue;
-    if (arg === '-c' || arg === '--config' || arg === '--enable' || arg === '--disable') {
-      if (!args[++i]) return null;
+    if (arg === 'app-server') { commands++; continue; }
+    if (arg === '--analytics-default-enabled') continue;
+    if (arg === '-c' || arg === '--config') {
+      const value = args[++i];
+      if (!value || !value.includes('=')) return null;
+      const split = value.indexOf('=');
+      configs.set(value.slice(0, split).trim(), value.slice(split + 1).trim());
       continue;
     }
-    // A future Desktop may select its own transport or add flags. Leave it alone.
+    if (arg === '--enable' || arg === '--disable') {
+      if (!args[++i] || args[i].startsWith('-')) return null;
+      // Conflicting feature switches are not the inspected Desktop contract.
+      if (args[i] === 'code_mode_host') return null;
+      continue;
+    }
+    // Unknown switches, explicit transports and subcommands remain private.
     return null;
   }
-  if (!args.some((arg) => arg.startsWith('mcp_servers.codex_app='))) return null;
+  if (commands !== 1) return null;
+  const legacy = configs.get('mcp_servers.codex_app')?.startsWith('{');
+  const pluginKey = 'plugins.codex-app-tools@openai-bundled.mcp_servers.codex_app.enabled';
+  const plugin = configs.get('features.code_mode_host') === 'true' && configs.get(pluginKey) === 'true';
+  if (!legacy && !plugin) return null;
+  if (configs.get(pluginKey) === 'false' || configs.get('mcp_servers.codex_app.enabled') === 'false') return null;
   return [...args, '--listen', endpoint];
 }
 
